@@ -1,0 +1,193 @@
+"""
+Main code of Dedalus quickstart script
+
+Modified by Mikhail Schee from the script for 2D Rayleigh-Benard convection in the Dedalus example files.
+
+*This script is NOT meant to be run directly.*
+
+To run this program, execute the command (-c and -v are optional):
+    $ bash run.sh -n <my_new_exp> -c 2 -v 1
+
+"""
+
+import numpy as np
+from mpi4py import MPI
+import time
+import pathlib
+
+from dedalus import public as de
+from dedalus.extras import flow_tools
+
+import logging
+logger = logging.getLogger(__name__)
+
+###############################################################################
+
+# Run parameters
+stop_sim_time = 25
+
+# Domain parameters
+Lx, Lz = (4., 1.)
+nx, nz = 512, 512
+x0, xf =  0.0, 1.0
+z0, zf = -1.0, 0.0
+
+# Physical parameters
+nu          = 1.0E-6        # [m^2/s] Viscosity (momentum diffusivity)
+kappa       = 1.4E-7        # [m^2/s] Thermal diffusivity
+g           = 9.81          # [m/s^2] Acceleration due to gravity
+
+# Boundary forcing parameters
+N_0     = 1.0                   # [rad/s]
+k       = 45                    # [m^-1]
+omega   = 0.7071                # [rad s^-1]
+theta   = np.arccos(omega/N_0)  # [rad]
+k_x     = k*omega/N_0           # [m^-1]
+k_z     = k*np.sin(theta)       # [m^-1]
+lam_x   = 2*np.pi / k_x         # [m]
+lam_z   = 2*np.pi / k_z         # [m]
+T       = 2*np.pi / omega       # [s]
+
+###############################################################################
+
+# Create bases and domain
+x_basis = de.Fourier('x', nx, interval=(x0, xf), dealias=3/2)
+z_basis = de.Chebyshev('z', nz, interval=(z0, zf), dealias=3/2)
+domain = de.Domain([x_basis, z_basis], grid_dtype=np.float64)
+x = domain.grid(0)
+z = domain.grid(1)
+
+# 2D Boussinesq hydrodynamics
+problem = de.IVP(domain, variables=['p','b','u','w','bz','uz','wz'])
+#   variables are dirichlet by default
+problem.meta['p','bz','uz','wz']['z']['dirichlet'] = False
+problem.parameters['NU'] = nu
+problem.parameters['KA'] = kappa
+problem.parameters['N0'] = N_0
+
+###############################################################################
+# Forcing from the boundary
+
+# Boundary forcing parameters
+A         = 2.0e-4
+problem.parameters['T']         = T   # [s] period of oscillation
+problem.parameters['nT']        = 3.0 # number of periods for the ramp
+problem.parameters['slope']     = 15
+problem.parameters['left_edge'] = 0.0
+problem.parameters['right_edge']= lam_x
+problem.parameters['kx']        = k_x
+problem.parameters['kz']        = k_z
+problem.parameters['omega']     = omega
+# Polarization relation from boundary forcing file
+PolRel = {'u': A*(g*omega*k_z)/(N_0**2*k_x),
+          'w': A*(g*omega)/(N_0**2),
+          'b': A*g}
+# Creating forcing amplitudes
+for fld in ['u', 'w', 'b']:#, 'p']:
+    BF = domain.new_field()
+    BF.meta['x']['constant'] = True  # means the NCC is constant along x
+    BF['g'] = PolRel[fld]
+    problem.parameters['BF' + fld] = BF  # pass function in as a parameter.
+    del BF
+# Substitutions for boundary forcing (see C-R & B eq 13.7)
+problem.substitutions['window'] = "(1/2)*(tanh(slope*(x-left_edge))+1)*(1/2)*(tanh(slope*(-x+right_edge))+1)"
+problem.substitutions['ramp']   = "(1/2)*(tanh(4*t/(nT*T) - 2) + 1)"
+problem.substitutions['fu']     = "-BFu*sin(kx*x + kz*z - omega*t)*window*ramp"
+problem.substitutions['fw']     = " BFw*sin(kx*x + kz*z - omega*t)*window*ramp"
+problem.substitutions['fb']     = "-BFb*cos(kx*x + kz*z - omega*t)*window*ramp"
+
+###############################################################################
+# Equations of motion (non-linear terms on RHS)
+problem.add_equation("dx(u) + wz = 0")
+problem.add_equation("dt(b) - KA*(dx(dx(b)) + dz(bz))" \
+                + "= -(N0**2)*w - (u*dx(b) + w*bz)")
+problem.add_equation("dt(u) -NU*dx(dx(u)) - NU*dz(uz) + dx(p)" \
+                + "= - (u*dx(u) + w*uz)")
+problem.add_equation("dt(w) -NU*dx(dx(w)) - NU*dz(wz) + dz(p) - b" \
+                + "= - (u*dx(w) + w*wz)")
+problem.add_equation("bz - dz(b) = 0")
+problem.add_equation("uz - dz(u) = 0")
+problem.add_equation("wz - dz(w) = 0")
+
+# Boundary contitions
+problem.add_bc("left(u) = 0")
+problem.add_bc("right(u) = right(fu)")
+problem.add_bc("left(w) = 0", condition="(nx != 0)")
+problem.add_bc("right(w) = right(fw)")
+problem.add_bc("left(b) = 0")
+problem.add_bc("right(b) = right(fb)")
+problem.add_bc("left(p) = 0", condition="(nx == 0)")
+
+# Build solver
+solver = problem.build_solver(de.timesteppers.RK222)
+logger.info('Solver built')
+
+# Initial conditions or restart
+if not pathlib.Path('restart.h5').exists():
+
+    # Initial conditions
+    b = solver.state['b']
+    bz = solver.state['bz']
+
+    # Random perturbations, initialized globally for same results in parallel
+    gshape = domain.dist.grid_layout.global_shape(scales=1)
+    slices = domain.dist.grid_layout.slices(scales=1)
+    rand = np.random.RandomState(seed=42)
+    noise = rand.standard_normal(gshape)[slices]
+
+    # Linear background + perturbations damped at walls
+    zb, zt = z_basis.interval
+    pert =  1e-3 * noise * (zt - z) * (z - zb)
+    b['g'] = pert * 0.0
+    b.differentiate('z', out=bz)
+
+    # Timestepping and output
+    dt = 0.125
+    fh_mode = 'overwrite'
+
+else:
+    # Restart
+    write, last_dt = solver.load_state('restart.h5', -1)
+
+    # Timestepping and output
+    dt = last_dt
+    stop_sim_time = 50
+    fh_mode = 'append'
+
+# Integration parameters
+solver.stop_sim_time = stop_sim_time
+solver.stop_wall_time = 180 * 60.0 # to get minutes
+solver.stop_iteration = np.inf
+
+# Analysis
+snapshots = solver.evaluator.add_file_handler('snapshots', sim_dt=0.25, max_writes=50, mode=fh_mode)
+snapshots.add_system(solver.state)
+
+# CFL
+CFL = flow_tools.CFL(solver, initial_dt=dt, cadence=10, safety=1,
+                     max_change=1.5, min_change=0.5, max_dt=0.125, threshold=0.05)
+CFL.add_velocities(('u', 'w'))
+
+# Flow properties
+flow = flow_tools.GlobalFlowProperty(solver, cadence=10)
+flow.add_property("(kx*u + kz*w)/omega", name='Lin_Criterion')
+
+# Main loop
+try:
+    logger.info('Starting loop')
+    start_time = time.time()
+    while solver.proceed:
+        dt = CFL.compute_dt()
+        dt = solver.step(dt)
+        if (solver.iteration-1) % 10 == 0:
+            logger.info('Iteration: %i, Time: %e, dt: %e' %(solver.iteration, solver.sim_time, dt))
+            logger.info('Max linear criterion = {0:f}'.format(flow.max('Lin_Criterion')))
+except:
+    logger.error('Exception raised, triggering end of main loop.')
+    raise
+finally:
+    end_time = time.time()
+    logger.info('Iterations: %i' %solver.iteration)
+    logger.info('Sim end time: %f' %solver.sim_time)
+    logger.info('Run time: %.2f sec' %(end_time-start_time))
+    logger.info('Run time: %f cpu-hr' %((end_time-start_time)/60/60*domain.dist.comm_cart.size))
