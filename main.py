@@ -24,10 +24,10 @@ logger = logging.getLogger(__name__)
 ###############################################################################
 
 # Run parameters
-stop_sim_time = 25
+stop_sim_time = 15
+adapt_dt = False
 
 # Domain parameters
-Lx, Lz = (4., 1.)
 nx, nz = 512, 512
 x0, xf =  0.0, 1.0
 z0, zf = -1.0, 0.0
@@ -70,11 +70,12 @@ problem.parameters['N0'] = N_0
 
 # Boundary forcing parameters
 A         = 2.0e-4
+buffer    = 0.05
 problem.parameters['T']         = T   # [s] period of oscillation
 problem.parameters['nT']        = 3.0 # number of periods for the ramp
-problem.parameters['slope']     = 15
-problem.parameters['left_edge'] = 0.0
-problem.parameters['right_edge']= lam_x
+problem.parameters['slope']     = 25
+problem.parameters['left_edge'] = buffer + 0.0
+problem.parameters['right_edge']= buffer + lam_x
 problem.parameters['kx']        = k_x
 problem.parameters['kz']        = k_z
 problem.parameters['omega']     = omega
@@ -177,7 +178,8 @@ try:
     logger.info('Starting loop')
     start_time = time.time()
     while solver.proceed:
-        dt = CFL.compute_dt()
+        if (adapt_dt):
+            dt = CFL.compute_dt()
         dt = solver.step(dt)
         if (solver.iteration-1) % 10 == 0:
             logger.info('Iteration: %i, Time: %e, dt: %e' %(solver.iteration, solver.sim_time, dt))
