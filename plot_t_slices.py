@@ -2,9 +2,10 @@
 Plot planes from joint analysis files.
 
 Usage:
-    plot_slices.py <files>... [--output=<dir>]
+    plot_slices.py NAME <files>... [--output=<dir>]
 
 Options:
+    NAME            # Name to put in plot title
     --output=<dir>  # Output directory [default: ./frames]
 
 """
@@ -21,6 +22,7 @@ plt.ioff()
 # Parse input parameters
 from docopt import docopt
 args = docopt(__doc__)
+name = args['NAME']
 h5_files = args['<files>']
 import pathlib
 output_path = pathlib.Path(args['--output']).absolute()
@@ -50,22 +52,36 @@ suptitle_size = 'large'
 # Helper functions
 
 # Make a plot for one task
-def plot_task(fig, axes, time_i, task_j, x_ax, z_ax, dsets, cmap, AR):
-    ax = axes[task_j]
-    print(ax)
+def plot_task(fig, axes, rows, cols, time_i, task_j, x_ax, z_ax, dsets, cmap, AR):
+    # get coordinates of desired axis
+    if rows==1 or cols==1:
+        ax = axes[task_j]
+    else:
+        ax = axes[task_j//cols, task_j%cols]
     # plot task colormesh
     im = ax.pcolormesh(x_ax, z_ax, dsets[task_j][time_i][1], cmap=cmap)
     # format axis labels and ticks
     format_labels_and_ticks(ax)
+    # Find max of absolute value for colorbar for limits symmetric around zero
+    cmax = max(abs(max(dsets[task_j][time_i][1].flatten())), abs(min(dsets[task_j][time_i][1].flatten())))
     # format colorbar
-    divider = make_axes_locatable(ax) # this is the only way I found to put the colorbar on top of the plot
-    cax = divider.append_axes('top', size='5%', pad=0.03)
-    fig.colorbar(im, cax=cax, orientation='horizontal', ticks=ticker.MaxNLocator(nbins=n_cb_ticks), format=ticker.FuncFormatter(latex_exp))
-    cax.xaxis.set_ticks_position('top')
+    cax = format_colorbar(im, ax, cmax)
     # Set aspect ratio for plot
     ax.set_aspect(AR)
     # add title
     cax.set_title(tasks[task_j], fontsize=title_size)
+
+def format_colorbar(image, axis, cmax):
+    # this is the only way I found to put the colorbar on top of the plot
+    divider = make_axes_locatable(axis)
+    caxis = divider.append_axes('top', size='5%', pad=0.03)
+    # Set upper and lower limits on colorbar
+    image.set_clim(-cmax, cmax)
+    # Create colorbar
+    cbar = fig.colorbar(image, cax=caxis, orientation='horizontal',  format=ticker.FuncFormatter(latex_exp), ticks=[-cmax, 0.0, cmax])
+    caxis.xaxis.set_ticks_position('top')
+    # Return color axis for placing plot title
+    return caxis
 
 def format_labels_and_ticks(ax):
     # add labels
@@ -126,7 +142,7 @@ dsets = []
 for task in tasks:
     task_tseries = []
     for filename in h5_files:
-        print(filename)
+        #print(filename)
         with h5py.File(filename, mode='r') as f:
             dset = f['tasks'][task]
             # Check dimensionality of data
@@ -154,11 +170,17 @@ AR = extent_aspect/aspect_ratio
 #for i in range(len(t_axis)):
 for i in range(10,12):
     fig, ax = plt.subplots(nrows=rows, ncols=cols)
+    # Set aspect ratio for figure
+    size_factor = 4.0
+    w, h = cols*size_factor, (rows+0.4)*size_factor
+    plt.gcf().set_size_inches(w, h)
     # Plot each task
-    for j in range(ax.size):
-        plot_task(fig, ax, i, j, x_axis, z_axis, dsets, cmap, AR)
+    for j in range(len(tasks)):
+        plot_task(fig, ax, rows, cols, i, j, x_axis, z_axis, dsets, cmap, AR)
     # Add title for overall figure
-    fig.suptitle('supertitle', fontsize=suptitle_size)
+    t = dsets[0][i][0]
+    title_str = '{:}, $t=${:2.2f}'
+    fig.suptitle(title_str.format(name, t), fontsize=suptitle_size)
     fig.tight_layout() # this (mostly) prevents axis labels from overlapping
     # Save figure as image in designated output directory
     save_fig_as_frame(fig, i, output_path, dpi)
