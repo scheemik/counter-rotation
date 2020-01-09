@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 ###############################################################################
 
 # Run parameters
-stop_sim_time = 15
+stop_sim_time = 25
 adapt_dt = False
 
 # Domain parameters

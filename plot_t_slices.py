@@ -19,6 +19,10 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 plt.ioff()
 
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+
 # Parse input parameters
 from docopt import docopt
 args = docopt(__doc__)
@@ -30,7 +34,8 @@ output_path = pathlib.Path(args['--output']).absolute()
 # Check if output path exists, if not, create it
 import os
 if not os.path.exists(output_path):
-    os.makedirs(output_path)
+    if rank==0:
+        os.makedirs(output_path)
 
 # Labels
 hori_label = r'$x$ (m)'
@@ -38,9 +43,9 @@ vert_label = r'$z$ (m)'
 
 # Parameters
 dpi = 100
-tasks = ['b', 'p', 'u', 'w']
-rows = 2
-cols = 2
+tasks = ['w'] # usually 'b', 'p', 'u', or 'w'
+rows = 1
+cols = 1
 cmap = 'RdBu_r'
 n_ticks = 5
 n_cb_ticks = 3
@@ -53,9 +58,12 @@ suptitle_size = 'large'
 
 # Make a plot for one task
 def plot_task(fig, axes, rows, cols, time_i, task_j, x_ax, z_ax, dsets, cmap, AR):
-    # get coordinates of desired axis
+    # get coordinates of desired axis, avoiding dumb indexing with if statements
     if rows==1 or cols==1:
-        ax = axes[task_j]
+        if rows==1 and cols==1:
+            ax = axes
+        else:
+            ax = axes[task_j]
     else:
         ax = axes[task_j//cols, task_j%cols]
     # plot task colormesh
@@ -64,6 +72,8 @@ def plot_task(fig, axes, rows, cols, time_i, task_j, x_ax, z_ax, dsets, cmap, AR
     format_labels_and_ticks(ax)
     # Find max of absolute value for colorbar for limits symmetric around zero
     cmax = max(abs(max(dsets[task_j][time_i][1].flatten())), abs(min(dsets[task_j][time_i][1].flatten())))
+    if cmax==0.0:
+        cmax = 0.001 # to avoid the weird jump with the first frame
     # format colorbar
     cax = format_colorbar(im, ax, cmax)
     # Set aspect ratio for plot
@@ -161,14 +171,16 @@ for task in tasks:
                 task_tseries.append(time_slice)
     dsets.append(task_tseries)
 
+# Find length of time series
+t_len = len(dsets[0])
+
 # Calculate aspect ratio of plot based on extent
 extent_aspect = abs((x_axis[-1]-x_axis[0])/(z_axis[-1]-z_axis[0]))
 aspect_ratio = 1
 AR = extent_aspect/aspect_ratio
 
 # Iterate across time, plotting and saving a frame for each timestep
-#for i in range(len(t_axis)):
-for i in range(10,12):
+for i in range(t_len):
     fig, ax = plt.subplots(nrows=rows, ncols=cols)
     # Set aspect ratio for figure
     size_factor = 4.0
@@ -184,25 +196,4 @@ for i in range(10,12):
     fig.tight_layout() # this (mostly) prevents axis labels from overlapping
     # Save figure as image in designated output directory
     save_fig_as_frame(fig, i, output_path, dpi)
-
-
-###############################################################################
-###############################################################################
-
-# if __name__ == "__main__":
-#
-#     import pathlib
-#     from docopt import docopt
-#     from dedalus.tools import logging
-#     from dedalus.tools import post
-#     from dedalus.tools.parallel import Sync
-#
-#     args = docopt(__doc__)
-#     h5_files = args['<files>']
-#     output_path = pathlib.Path(args['--output']).absolute()
-#     # Create output directory if needed
-#     with Sync() as sync:
-#         if sync.comm.rank == 0:
-#             if not output_path.exists():
-#                 output_path.mkdir()
-#     #post.visit_writes(args['<files>'], main, output=output_path)
+    plt.close(fig)
