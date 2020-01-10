@@ -30,10 +30,6 @@ logger = logging.getLogger(__name__)
 
 ###############################################################################
 
-# Run parameters
-stop_sim_time = 10
-adapt_dt = False
-
 # Domain parameters
 nx, nz = 512, 512
 x0, xf =  0.0, 1.0
@@ -54,6 +50,13 @@ k_z     = k*np.sin(theta)       # [m^-1]
 lam_x   = 2*np.pi / k_x         # [m]
 lam_z   = 2*np.pi / k_z         # [m]
 T       = 2*np.pi / omega       # [s]
+
+# Run parameters
+stop_sim_time = 10*T
+dt = 0.125
+adapt_dt = False
+snap_dt = 3*dt
+snap_max_writes = 50
 
 ###############################################################################
 
@@ -149,8 +152,7 @@ if not pathlib.Path('restart.h5').exists():
     b['g'] = pert * 0.0
     b.differentiate('z', out=bz)
 
-    # Timestepping and output
-    dt = 0.125
+    # Output
     fh_mode = 'overwrite'
 
 else:
@@ -167,22 +169,38 @@ solver.stop_sim_time = stop_sim_time
 solver.stop_wall_time = 180 * 60.0 # to get minutes
 solver.stop_iteration = np.inf
 
+###############################################################################
 # Analysis
-snapshots = solver.evaluator.add_file_handler('snapshots', sim_dt=0.25, max_writes=50, mode=fh_mode)
+def add_new_file_handler(snapshot_directory='snapshots/new', sdt=snap_dt):
+    return solver.evaluator.add_file_handler(snapshot_directory, sim_dt=sdt, max_writes=snap_max_writes, mode=fh_mode)
+
+# Add file handler for snapshots and output state of variables
+snapshots = add_new_file_handler('snapshots')
 snapshots.add_system(solver.state)
+
+# Add file handler for Hilbert Transform (HT)
+HT = add_new_file_handler('snapshots/HT')
+HT.add_task("integ(u,'x')", layout='g', name='<u>')
+
+###############################################################################
 
 # CFL
 CFL = flow_tools.CFL(solver, initial_dt=dt, cadence=10, safety=1,
                      max_change=1.5, min_change=0.5, max_dt=0.125, threshold=0.05)
 CFL.add_velocities(('u', 'w'))
 
+###############################################################################
+
 # Flow properties
 flow = flow_tools.GlobalFlowProperty(solver, cadence=10)
 flow.add_property("(kx*u + kz*w)/omega", name='Lin_Criterion')
 
+###############################################################################
+
 # Main loop
 try:
     logger.info('Starting loop')
+    logger.info('Simulation end time: %e' %(stop_sim_time))
     start_time = time.time()
     while solver.proceed:
         if (adapt_dt):
