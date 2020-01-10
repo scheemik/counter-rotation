@@ -3,6 +3,13 @@ Main code of Dedalus quickstart script
 
 Modified by Mikhail Schee from the script for 2D Rayleigh-Benard convection in the Dedalus example files.
 
+An attempt to implement counter rotation (complex demodulation) to separate the upward and downward portions of a propagating internal wave. If I add those two back together, I should get the original back.
+Referencing these resources:
+    Mercier et al. (2008) "Reflection and diffraction of internal waves analyzed..."
+    Grisouard and Thomas (2015) "Critical and near-critical reflections of near-inertial..."
+    Individual meeting notes - Nov  4, 2019
+    Individual meeting notes - Jul 26, 2019
+
 *This script is NOT meant to be run directly.*
 
 To run this program, execute the command (-c and -v are optional):
@@ -24,7 +31,7 @@ logger = logging.getLogger(__name__)
 ###############################################################################
 
 # Run parameters
-stop_sim_time = 25
+stop_sim_time = 10
 adapt_dt = False
 
 # Domain parameters
