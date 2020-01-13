@@ -41,18 +41,28 @@ kappa       = 1.4E-7        # [m^2/s] Thermal diffusivity
 g           = 9.81          # [m/s^2] Acceleration due to gravity
 
 # Boundary forcing parameters
+firstop = False
 N_0     = 1.0                   # [rad/s]
-k       = 45                    # [m^-1]
-omega   = 0.7071                # [rad s^-1]
-theta   = np.arccos(omega/N_0)  # [rad]
-k_x     = k*omega/N_0           # [m^-1]
+if firstop:
+    k       = 45                    # [m^-1]
+    omega   = 0.7071                # [rad s^-1]
+    theta   = np.arccos(omega/N_0)  # [rad]
+    k_x     = k*omega/N_0           # [m^-1]
+    lam_x   = 2*np.pi / k_x         # [m]
+else:
+    theta   = np.pi / 4.0 #(45deg)  # [rad]
+    lam_x   = (xf - x0) / 2.0       # [m]
+    k_x     = 2*np.pi / lam_x       # [m^-1]
+    omega   = N_0 * np.cos(theta)   # [rad s^-1]
+    k       = k_x * N_0 / omega     # [m^-1]
+
 k_z     = k*np.sin(theta)       # [m^-1]
-lam_x   = 2*np.pi / k_x         # [m]
 lam_z   = 2*np.pi / k_z         # [m]
 T       = 2*np.pi / omega       # [s]
 
+
 # Run parameters
-stop_sim_time = 10*T
+stop_sim_time = 15*T
 dt = 0.125
 adapt_dt = False
 snap_dt = 3*dt
@@ -101,7 +111,8 @@ for fld in ['u', 'w', 'b']:#, 'p']:
     problem.parameters['BF' + fld] = BF  # pass function in as a parameter.
     del BF
 # Substitutions for boundary forcing (see C-R & B eq 13.7)
-problem.substitutions['window'] = "(1/2)*(tanh(slope*(x-left_edge))+1)*(1/2)*(tanh(slope*(-x+right_edge))+1)"
+problem.substitutions['window'] = "1"
+#problem.substitutions['window'] = "(1/2)*(tanh(slope*(x-left_edge))+1)*(1/2)*(tanh(slope*(-x+right_edge))+1)"
 problem.substitutions['ramp']   = "(1/2)*(tanh(4*t/(nT*T) - 2) + 1)"
 problem.substitutions['fu']     = "-BFu*sin(kx*x + kz*z - omega*t)*window*ramp"
 problem.substitutions['fw']     = " BFw*sin(kx*x + kz*z - omega*t)*window*ramp"
@@ -207,7 +218,8 @@ try:
             dt = CFL.compute_dt()
         dt = solver.step(dt)
         if (solver.iteration-1) % 10 == 0:
-            logger.info('Iteration: %i, Time: %e, dt: %e' %(solver.iteration, solver.sim_time, dt))
+            logger.info('Iteration: %i, Time: %e, of: %e' %(solver.iteration, solver.sim_time, stop_sim_time))
+            #logger.info('Iteration: %i, Time: %e, dt: %e' %(solver.iteration, solver.sim_time, dt))
             logger.info('Max linear criterion = {0:f}'.format(flow.max('Lin_Criterion')))
 except:
     logger.error('Exception raised, triggering end of main loop.')
