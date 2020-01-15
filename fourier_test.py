@@ -9,7 +9,7 @@ def make_subplot(hori, vert, data, fig, ax, h_label, v_label, title):
     fig.colorbar(im, ax=ax)
 
 omega = 2.0
-omega2 = omega*3
+omega2 = omega
 kz    = 2.0
 kz2   = kz
 A = 1.0
@@ -19,13 +19,13 @@ B = A * 1
 n_o = 4
 t0 = 0.0
 tf = (2*np.pi) / omega * n_o
-nt = 1024
+nt = 512
 dt = (tf-t0)/nt
 
 z0 = 0.0
 zf = 1.0
 zf = (2*np.pi) / kz
-nz = 1024
+nz = 512
 dz = (zf-z0)/nz
 
 t = np.linspace(t0, tf, nt)
@@ -39,54 +39,60 @@ dn = B*np.cos(omega2 * tm + kz2*zm)
 
 ## Step 1
 
-# fourier transform in time
-fty = np.fft.fft(y, axis=1)
-# find relevant frequencies
-freq = np.fft.fftfreq(len(t), dt)
-ftm, zft = np.meshgrid(freq, z)
+# fourier transform in time, filter negative freq's, inverse fourier transform
+def FT_in_time(t, z, data, dt):
+    # FT in time of the data (axis 1 is time)
+    ftd = np.fft.fft(data, axis=1)
+    # find relevant frequencies
+    freq = np.fft.fftfreq(len(t), dt)
+    f_grid, z_grid = np.meshgrid(freq, z)
+    # Filter out negative frequencies
+    for i in range(f_grid.shape[0]):
+        for j in range(f_grid.shape[1]):
+            if f_grid[i][j] < 0.0:
+                # Gets rid of negative freq's
+                ftd[i][j] = 0
+            else:
+                # Corrects for lost amplitude
+                ftd[i][j] = ftd[i][j] * 2.0
+    # inverse fourier transform in time of the data
+    iftd = np.fft.ifft(ftd, axis=1)
+    #   a complex valued signal where iftd.real == data, or close enough
+    return iftd
 
-# Filter out negative frequencies
-for i in range(ftm.shape[0]):
-    for j in range(ftm.shape[1]):
-        if ftm[i][j] < 0.0:
-            # Gets rid of negative f's
-            fty[i][j] = 0
-        else:
-            # Corrects for lost amplitude
-            fty[i][j] = fty[i][j] * 2.0
-
-# inverse fourier transform in time
-ifty = np.fft.ifft(fty, axis=1)
-#   ify is now a complex valued signal where ifty.real == y, or at least close enough
+ift_t_y = FT_in_time(t, z, y, dt)
 
 ### Step 2
 
 # fourier transform in spatial dimension (z)
-#   similar to ft in time, but switch dimensions around
-fzyp = np.fft.fft(ifty, axis=0)
-# find relevant wavenumbers
-wavn = np.fft.fftfreq(len(z), dz)
-tfz, fzm = np.meshgrid(t, wavn)
-# make a copy for the negative wave numbers
-fzyn = fzyp.copy()
+#   similar to FT in time, but switch dimensions around
+def FT_in_space(t, z, data, dz):
+    # FT in space (z) of the data (axis 0 is z) for positive wave numbers
+    fzdp = np.fft.fft(data, axis=0)
+    # make a copy for the negative wave numbers
+    fzdn = fzdp.copy()
+    # find relevant wavenumbers
+    k_zs = np.fft.fftfreq(len(z), dz)
+    t_grid, k_grid = np.meshgrid(t, k_zs)
+    # Filter out one half of wavenumbers to separate up and down
+    for i in range(k_grid.shape[0]):
+        for j in range(k_grid.shape[1]):
+            if k_grid[i][j] > 0.0:
+                # for up, remove values for positive wave numbers
+                fzdp[i][j] = 0.0
+            else:
+                # for down, remove values for negative wave numbers
+                fzdn[i][j] = 0.0
+    # inverse fourier transform in space (z)
+    ifzdp = np.fft.ifft(fzdp, axis=0)
+    ifzdn = np.fft.ifft(fzdn, axis=0)
+    return ifzdp, ifzdn
 
-# Filter out one half of wavenumbers to separate up and down
-for i in range(fzm.shape[0]):
-    for j in range(fzm.shape[1]):
-        if fzm[i][j] > 0.0:
-            # for up, remove values for positive wave numbers
-            fzyp[i][j] = 0.0
-        else:
-            # for down, remove values for negative wave numbers
-            fzyn[i][j] = 0.0
-
-# inverse fourier transform in space (z)
-ifzyp = np.fft.ifft(fzyp, axis=0)
-ifzyn = np.fft.ifft(fzyn, axis=0)
+ift_z_y_p, ift_z_y_n = FT_in_space(t, z, ift_t_y, dz)
 
 # Get up and down fields as F = |mag_f| * exp(i*phi_f)
-up_field = ifzyp.real * np.exp(np.real(1j * ifzyp.imag))
-dn_field = ifzyn.real * np.exp(np.real(1j * ifzyn.imag))
+up_field = ift_z_y_p.real * np.exp(np.real(1j * ift_z_y_p.imag))
+dn_field = ift_z_y_n.real * np.exp(np.real(1j * ift_z_y_n.imag))
 
 # plotting
 diff = False
