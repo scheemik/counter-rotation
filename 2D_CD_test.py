@@ -35,7 +35,7 @@ def FT_in_time(t, x, z, data, dt):
     # find relevant frequencies
     freq = np.fft.fftfreq(len(t), dt)
     f_grid, x_grid, z_grid = np.meshgrid(freq, x, z, indexing='ij')
-    # Filter out negative frequencies
+    # Filter out negative frequencies (and other freq's maybe? Band pass anyone?)
     for i in range(f_grid.shape[0]):
         for j in range(f_grid.shape[1]):
             for l in range(f_grid.shape[2]):
@@ -49,6 +49,58 @@ def FT_in_time(t, x, z, data, dt):
     iftd = np.fft.ifft(ftd, axis=0)
     #   a complex valued signal where iftd.real == data, or close enough
     return iftd
+
+# fourier transform in spatial dimensions
+#   similar to FT in time, but switch dimensions around
+def FT_in_space(t, x, z, data, dx, dz):
+    # FT in space (x) of the data (axis 1 is x) for positive k_x
+    AB = np.fft.fft(data, axis=1)
+    # make a copy for the negative k_x
+    CD = AB.copy()
+    # find relevant wavenumbers
+    k_xs = np.fft.fftfreq(len(x), dx)
+    t_grid, kx_grid, z_grid = np.meshgrid(t, k_xs, z, indexing='ij')
+    # Filter out half the wavenumbers to separate positive and negative
+    for i in range(kx_grid.shape[0]):
+        for j in range(kx_grid.shape[1]):
+            for l in range(kx_grid.shape[2]):
+                if kx_grid[i][j][l] > 0.0:
+                    # for AB, remove values for positive wave numbers
+                    AB[i][j][l] = 0.0
+                else:
+                    # for CD, remove values for negative wave numbers
+                    CD[i][j][l] = 0.0
+    # inverse fourier transform in space (x)
+    kx_p = np.fft.ifft(AB, axis=1)
+    kx_n = np.fft.ifft(CD, axis=1)
+    ##
+    # FT in space (z) of the data (axis 2 is z) for positive k_z
+    A = np.fft.fft(kx_p, axis=2)
+    C = np.fft.fft(kx_n, axis=2)
+    # make copies for the negative k_x
+    B = A.copy()
+    D = C.copy()
+    # find relevant wavenumbers
+    k_zs = np.fft.fftfreq(len(z), dz)
+    t_grid, x_grid, kz_grid = np.meshgrid(t, x, k_zs, indexing='ij')
+    # Filter out half the wavenumbers to separate positive and negative
+    for i in range(kz_grid.shape[0]):
+        for j in range(kz_grid.shape[1]):
+            for l in range(kz_grid.shape[2]):
+                if kz_grid[i][j][l] > 0.0:
+                    # for A and C, remove values for positive wave numbers
+                    A[i][j][l] = 0.0
+                    C[i][j][l] = 0.0
+                else:
+                    # for B and D, remove values for negative wave numbers
+                    B[i][j][l] = 0.0
+                    D[i][j][l] = 0.0
+    # inverse fourier transform in space (x)
+    A_xp_zp = np.fft.ifft(A, axis=2)
+    B_xp_zn = np.fft.ifft(B, axis=2)
+    C_xn_zp = np.fft.ifft(C, axis=2)
+    D_xn_zn = np.fft.ifft(D, axis=2)
+    return A_xp_zp, B_xp_zn, C_xn_zp, D_xn_zn
 
 ###############################################################################
 # %%
@@ -70,7 +122,7 @@ D = A * 1
 n_o = 4
 t0 = 0.0
 tf = (2*np.pi) / omega * n_o
-nt = 128
+nt = 256
 dt = (tf-t0)/nt
 
 # number of horizontal wavelengths
@@ -103,11 +155,15 @@ Df = D*np.exp(1j*(omega*tm + kx*xm + kz*zm))
 up = Af + Cf
 dn = Bf + Df
 # total field
-y = up #+ dn
+y = Af + Bf
 
 ## Step 1
 print('taking FT in time')
 ift_t_y = FT_in_time(t, x, z, y, dt)
+
+## Step 2
+print('taking FT in space')
+A_cd, B_cd, C_cd, D_cd = FT_in_space(t, x, z, ift_t_y, dx, dz)
 
 ###############################################################################
 
@@ -126,10 +182,14 @@ if plot_frames == True:
         title_str = '{:}, $t=${:2.2f}'
         fig.suptitle(title_str.format(name, t[i]))
         # Plot
-        plot_t_slice(xm[i], zm[i], Af[i].real, fig, ax[0][0], r'$x$', r'$z$', r'A')
-        plot_t_slice(xm[i], zm[i], Bf[i].real, fig, ax[0][1], r'$x$', r'$z$', r'B')
-        plot_t_slice(xm[i], zm[i], Cf[i].real, fig, ax[1][0], r'$x$', r'$z$', r'C')
-        plot_t_slice(xm[i], zm[i], Df[i].real, fig, ax[1][1], r'$x$', r'$z$', r'D')
+        plot_t_slice(xm[i], zm[i], y[i].real, fig, ax[0][0], r'$x$', r'$z$', r'OG')
+        plot_t_slice(xm[i], zm[i], A_cd[i].real+B_cd[i].real, fig, ax[0][1], r'$x$', r'$z$', r'2D CD')
+        plot_t_slice(xm[i], zm[i], A_cd[i].real, fig, ax[1][0], r'$x$', r'$z$', r'A CD')
+        plot_t_slice(xm[i], zm[i], B_cd[i].real, fig, ax[1][1], r'$x$', r'$z$', r'B CD')
+        # plot_t_slice(xm[i], zm[i], A_cd[i].real, fig, ax[0][0], r'$x$', r'$z$', r'A')
+        # plot_t_slice(xm[i], zm[i], B_cd[i].real, fig, ax[0][1], r'$x$', r'$z$', r'B')
+        # plot_t_slice(xm[i], zm[i], C_cd[i].real, fig, ax[1][0], r'$x$', r'$z$', r'C')
+        # plot_t_slice(xm[i], zm[i], D_cd[i].real, fig, ax[1][1], r'$x$', r'$z$', r'D')
         fig.tight_layout() # this (mostly) prevents axis labels from overlapping
         # Save figure as image in designated output directory
         save_fig_as_frame(fig, i, output_path, dpi)
