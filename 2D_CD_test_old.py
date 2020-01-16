@@ -36,11 +36,21 @@ def FT_in_time(t, x, z, data, dt):
     freq = np.fft.fftfreq(len(t), dt)
     f_grid, x_grid, z_grid = np.meshgrid(freq, x, z, indexing='ij')
     # Create mask to keep positive frequencies - add 1 to sign of f_grid
-    f_mask = np.sign(f_grid) + 1.0
     #  -1 becomes 0, negative frequencies are masked out
     #   0 becomes 1, no change to frequencies of 0
     #   1 becomes 2, double positive frequencies to correct for lost amplitude
+    f_mask = np.sign(f_grid) + 1.0
     ftd = ftd * f_mask
+    # # Filter out negative frequencies (and other freq's maybe? Band pass anyone?)
+    # for i in range(f_grid.shape[0]):
+    #     for j in range(f_grid.shape[1]):
+    #         for l in range(f_grid.shape[2]):
+    #             if f_grid[i][j][l] < 0.0:
+    #                 # Get rid of negative freq's
+    #                 ftd[i][j][l] = 0
+    #             else:
+    #                 # Correct for lost amplitude
+    #                 ftd[i][j][l] = ftd[i][j][l] * 2.0
     # inverse fourier transform in time of the data
     iftd = np.fft.ifft(ftd, axis=0)
     #   a complex valued signal where iftd.real == data, or close enough
@@ -56,18 +66,17 @@ def FT_in_space(t, x, z, data, dx, dz):
     # find relevant wavenumbers
     k_xs = np.fft.fftfreq(len(x), dx)
     t_grid, kx_grid, z_grid = np.meshgrid(t, k_xs, z, indexing='ij')
-    # Create mask to keep positive k_xs - relies on integer arithmetic
-    kx_p_mask = np.ceil((np.sign(kx_grid) + 1.0)/2)
-    #  -1 becomes 0, negative kxs are masked out
-    #   0 becomes 1, no change to kxs of 0
-    #   1 becomes 1, no change to positive kxs
-    CD = CD * kx_p_mask
-    # Create mask to keep negative k_xs - relies on integer arithmetic
-    kx_n_mask = np.ceil((np.sign(kx_grid) - 1.0)/2)
-    #  -1 becomes 1, no change to negative kxs
-    #   0 becomes 1, no change to kxs of 0
-    #   1 becomes 0, positive kxs are masked out
-    AB = AB * kx_n_mask
+    kx_mask = np.sign(kx_grid)
+    # Filter out half the wavenumbers to separate positive and negative
+    for i in range(kx_grid.shape[0]):
+        for j in range(kx_grid.shape[1]):
+            for l in range(kx_grid.shape[2]):
+                if kx_grid[i][j][l] > 0.0:
+                    # for AB, remove values for positive wave numbers
+                    AB[i][j][l] = 0.0
+                else:
+                    # for CD, remove values for negative wave numbers
+                    CD[i][j][l] = 0.0
     # inverse fourier transform in space (x)
     kx_p = np.fft.ifft(AB, axis=1)
     kx_n = np.fft.ifft(CD, axis=1)
@@ -81,21 +90,20 @@ def FT_in_space(t, x, z, data, dx, dz):
     # find relevant wavenumbers
     k_zs = np.fft.fftfreq(len(z), dz)
     t_grid, x_grid, kz_grid = np.meshgrid(t, x, k_zs, indexing='ij')
-    # Create mask to keep positive k_zs - relies on integer arithmetic
-    kz_p_mask = np.ceil((np.sign(kz_grid) + 1.0)/2)
-    #  -1 becomes 0, negative kzs are masked out
-    #   0 becomes 1, no change to kzs of 0
-    #   1 becomes 1, no change to positive kzs
-    B = B * kz_p_mask
-    D = D * kz_p_mask
-    # Create mask to keep negative k_zs - relies on integer arithmetic
-    kz_n_mask = np.ceil((np.sign(kz_grid) - 1.0)/2)
-    #  -1 becomes 1, no change to negative kzs
-    #   0 becomes 1, no change to kzs of 0
-    #   1 becomes 0, positive kzs are masked out
-    A = A * kz_n_mask
-    C = C * kz_n_mask
-    # inverse fourier transform in space (z)
+    kz_pn = np.sign(kz_grid)
+    # Filter out half the wavenumbers to separate positive and negative
+    for i in range(kz_grid.shape[0]):
+        for j in range(kz_grid.shape[1]):
+            for l in range(kz_grid.shape[2]):
+                if kz_grid[i][j][l] > 0.0:
+                    # for A and C, remove values for positive wave numbers
+                    A[i][j][l] = 0.0
+                    C[i][j][l] = 0.0
+                else:
+                    # for B and D, remove values for negative wave numbers
+                    B[i][j][l] = 0.0
+                    D[i][j][l] = 0.0
+    # inverse fourier transform in space (x)
     A_xp_zp = np.fft.ifft(A, axis=2)
     B_xp_zn = np.fft.ifft(B, axis=2)
     C_xn_zp = np.fft.ifft(C, axis=2)
@@ -107,7 +115,7 @@ def FT_in_space(t, x, z, data, dx, dz):
 
 output_path = '2D_CD_frames'
 dpi = 100
-name = ''
+name = 'plot test'
 
 # Parameters
 omega = 2.0
@@ -122,7 +130,7 @@ D = A * 0
 n_o = 4
 t0 = 0.0
 tf = (2*np.pi) / omega * n_o
-nt = 256
+nt = 128
 dt = (tf-t0)/nt
 
 # number of horizontal wavelengths
