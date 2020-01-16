@@ -39,7 +39,7 @@ if __name__ == '__main__':
     print('Gif saving to', gif_file)
 
 # To set the frames per second
-fps = 30
+fps = 15
 frame_duration = 1.0 / fps
 
 images = []
