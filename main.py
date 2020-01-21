@@ -59,10 +59,10 @@ else:
 k_z     = k*np.sin(theta)       # [m^-1]
 lam_z   = 2*np.pi / k_z         # [m]
 T       = 2*np.pi / omega       # [s]
-
+print('T =', T)
 
 # Run parameters
-stop_sim_time = 15*T
+stop_sim_time = 25*T
 dt = 0.125
 adapt_dt = False
 snap_dt = 3*dt
@@ -221,6 +221,8 @@ try:
             logger.info('Iteration: %i, Time: %e, of: %e' %(solver.iteration, solver.sim_time, stop_sim_time))
             #logger.info('Iteration: %i, Time: %e, dt: %e' %(solver.iteration, solver.sim_time, dt))
             logger.info('Max linear criterion = {0:f}'.format(flow.max('Lin_Criterion')))
+            if np.isnan(flow.max('Lin_Criterion')):
+                raise NameError('Code blew up it seems')
 except:
     logger.error('Exception raised, triggering end of main loop.')
     raise
@@ -230,3 +232,4 @@ finally:
     logger.info('Sim end time: %f' %solver.sim_time)
     logger.info('Run time: %.2f sec' %(end_time-start_time))
     logger.info('Run time: %f cpu-hr' %((end_time-start_time)/60/60*domain.dist.comm_cart.size))
+    logger.info('Oscillation period (T): %f' %T)
