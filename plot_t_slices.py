@@ -52,6 +52,7 @@ n_cb_ticks = 3
 round_to_decimal = 1
 title_size = 'medium'
 suptitle_size = 'large'
+T = 8.885765876316732
 
 ###############################################################################
 # Helper functions
@@ -191,8 +192,9 @@ for i in range(t_len):
         plot_task(fig, ax, rows, cols, i, j, x_axis, z_axis, dsets, cmap, AR)
     # Add title for overall figure
     t = dsets[0][i][0]
-    title_str = '{:}, $t=${:2.2f}'
-    fig.suptitle(title_str.format(name, t), fontsize=suptitle_size)
+    current_T = t/T
+    title_str = '{:}, $t/T=${:2.2f}'
+    fig.suptitle(title_str.format(name, current_T), fontsize=suptitle_size)
     fig.tight_layout() # this (mostly) prevents axis labels from overlapping
     # Save figure as image in designated output directory
     save_fig_as_frame(fig, i, output_path, dpi)
