@@ -107,7 +107,17 @@ then
 		${mpiexec_command} -n $CORES python3 $merge_file $snapshot_path
 	fi
     echo 'Done merging snapshots'
+
+	# Reformat snapshot file names
+	echo 'Reformatting snapshot file names'
+	for i in {1..9..1}
+	do
+		old_name=${snapshot_path}/snapshots_s${i}.h5
+		new_name=${snapshot_path}/snapshots_s0${i}.h5
+		mv $old_name $new_name
+	done
 fi
+
 
 ###############################################################################
 # plot frames - note: already checked if snapshots exist in step above
