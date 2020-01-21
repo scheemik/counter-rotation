@@ -59,11 +59,11 @@ def FT_in_space(t, x, z, data, dx, dz):
     # Create mask to keep positive k_xs - relies on integer arithmetic
     kx_p_mask = np.ceil((np.sign(kx_grid) + 1.0)/2)
     #  -1 becomes 0, negative kxs are masked out
-    #   0 becomes 1, no change to kxs of 0
+    #   0 becomes 1, no change to kxs of 0 - masked out
     #   1 becomes 1, no change to positive kxs
     CD = CD * kx_p_mask
     # Create mask to keep negative k_xs - relies on integer arithmetic
-    kx_n_mask = np.ceil((np.sign(kx_grid) - 1.0)/2)
+    kx_n_mask = np.abs(np.ceil((np.sign(kx_grid) - 1.0)/2))
     #  -1 becomes 1, no change to negative kxs
     #   0 becomes 1, no change to kxs of 0
     #   1 becomes 0, positive kxs are masked out
@@ -84,12 +84,12 @@ def FT_in_space(t, x, z, data, dx, dz):
     # Create mask to keep positive k_zs - relies on integer arithmetic
     kz_p_mask = np.ceil((np.sign(kz_grid) + 1.0)/2)
     #  -1 becomes 0, negative kzs are masked out
-    #   0 becomes 1, no change to kzs of 0
+    #   0 becomes 1, no change to kzs of 0 - masked out
     #   1 becomes 1, no change to positive kzs
     B = B * kz_p_mask
     D = D * kz_p_mask
     # Create mask to keep negative k_zs - relies on integer arithmetic
-    kz_n_mask = np.ceil((np.sign(kz_grid) - 1.0)/2)
+    kz_n_mask = np.abs(np.ceil((np.sign(kz_grid) - 1.0)/2))
     #  -1 becomes 1, no change to negative kzs
     #   0 becomes 1, no change to kzs of 0
     #   1 becomes 0, positive kzs are masked out
@@ -112,7 +112,7 @@ name = ''
 # Parameters
 omega = 2.0
 kx    = 2.0
-kz   = 2.0
+kz    = 2.0
 A = 1.0
 B = A * 1
 C = A * 0
@@ -122,7 +122,7 @@ D = A * 0
 n_o = 4
 t0 = 0.0
 tf = (2*np.pi) / omega * n_o
-nt = 256
+nt = 128
 dt = (tf-t0)/nt
 
 # number of horizontal wavelengths
@@ -221,9 +221,9 @@ if plot_frames == True:
         fig.suptitle(title_str.format(name, t[i]))
         # Plot
         plot_t_slice(xm[i], zm[i], y[i], fig, ax[0][0], r'$x$', r'$z$', r'OG')
-        plot_t_slice(xm[i], zm[i], y_cd[i], fig, ax[0][1], r'$x$', r'$z$', r'2D CD')
-        plot_t_slice(xm[i], zm[i], up_cd[i], fig, ax[1][0], r'$x$', r'$z$', r'Up CD')
-        plot_t_slice(xm[i], zm[i], dn_cd[i], fig, ax[1][1], r'$x$', r'$z$', r'Down CD')
+        plot_t_slice(xm[i], zm[i], y[i]-y_cd[i], fig, ax[0][1], r'$x$', r'$z$', r'Total Diff')
+        plot_t_slice(xm[i], zm[i], up[i]-up_cd[i], fig, ax[1][0], r'$x$', r'$z$', r'Up Diff')
+        plot_t_slice(xm[i], zm[i], dn[i]-dn_cd[i], fig, ax[1][1], r'$x$', r'$z$', r'Down Diff')
         # plot_t_slice(xm[i], zm[i], A_cd[i].real, fig, ax[0][0], r'$x$', r'$z$', r'A')
         # plot_t_slice(xm[i], zm[i], B_cd[i].real, fig, ax[0][1], r'$x$', r'$z$', r'B')
         # plot_t_slice(xm[i], zm[i], C_cd[i].real, fig, ax[1][0], r'$x$', r'$z$', r'C')
