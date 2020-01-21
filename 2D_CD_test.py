@@ -115,8 +115,8 @@ kx    = 2.0
 kz    = 2.0
 A = 1.0
 B = A * 1
-C = A * 0
-D = A * 0
+C = A * 1.1
+D = A * 0.7
 
 # number of oscillation periods
 n_o = 4
@@ -176,30 +176,6 @@ up_cd = A_cd + C_cd
 dn_cd = B_cd + D_cd
 # Get total CD field
 y_cd = up_cd + dn_cd
-
-# tempf = ft_t_pn_array.shape[0]
-# ft_t_pn_array[tempf//2:, :, :] *= 2
-# with open('frequencies_array.txt', 'w') as outfile:
-#     outfile.write('# array shape: {0}\n'.format(ft_t_pn_array.shape))
-#     for i in range(ft_t_pn_array.shape[0]):
-#         outfile.write('# freq_array[' + str(i) + ']\n')
-#         np.savetxt(outfile, ft_t_pn_array[i], fmt='%.0f', delimiter=' ', newline=',\n')
-#
-# tempx = ft_x_pn_array.shape[1]
-# ft_x_pn_array[:, tempx//2:, :] *= 2
-# with open('kx_array.txt', 'w') as outfile:
-#     outfile.write('# array shape: {0}\n'.format(ft_x_pn_array.shape))
-#     for i in range(ft_x_pn_array.shape[0]):
-#         outfile.write('# kx_array[' + str(i) + ']\n')
-#         np.savetxt(outfile, ft_x_pn_array[i], fmt='%.0f', delimiter=' ', newline=',\n')
-#
-# tempz = ft_z_pn_array.shape[2]
-# ft_z_pn_array[:, :, tempz//2:] *= 2
-# with open('kz_array.txt', 'w') as outfile:
-#     outfile.write('# array shape: {0}\n'.format(ft_z_pn_array.shape))
-#     for i in range(ft_z_pn_array.shape[0]):
-#         outfile.write('# kz_array[' + str(i) + ']\n')
-#         np.savetxt(outfile, ft_z_pn_array[i], fmt='%.0f', delimiter=' ', newline=',\n')
 
 
 ###############################################################################
