@@ -52,15 +52,38 @@ tasks = ['b', 'p', 'u', 'w']
 T = 8.885765876316732
 T_start = 11
 T_stop  = 14
+dt = 0.125
 
 ###############################################################################
+# fourier transform in time, filter negative freq's, inverse fourier transform
+def FT_in_time(t, x, z, data, dt):
+    # FT in time of the data (axis 0 is time)
+    ftd = np.fft.fft(data, axis=0)
+    # find relevant frequencies
+    freq = np.fft.fftfreq(len(t), dt)
+    f_grid, x_grid, z_grid = np.meshgrid(freq, x, z, indexing='ij')
+    # Create mask to keep positive frequencies - add 1 to sign of f_grid
+    f_mask = np.sign(f_grid) + 1.0
+    #  -1 becomes 0, negative frequencies are masked out
+    #   0 becomes 1, no change to frequencies of 0
+    #   1 becomes 2, double positive frequencies to correct for lost amplitude
+    ftd = ftd * f_mask
+    # inverse fourier transform in time of the data
+    iftd = np.fft.ifft(ftd, axis=0)
+    #   a complex valued signal where iftd.real == data, or close enough
+    return iftd
+
+###############################################################################
+# Gather the data
 
 # dsets will be an array containing all the data
-#   it will have a size of: tasks x timesteps x 2 x nx x nz (5D)
+#   it will have a size of: tasks x timesteps x nx x nz (5D)
 #   where timesteps is the number of time slices between T start and stop
 dsets = []
+t_s   = []
 for task in tasks:
     task_tseries = []
+    task_ts = []
     for filename in h5_files:
         #print(filename)
         with h5py.File(filename, mode='r') as f:
@@ -80,23 +103,34 @@ for task in tasks:
                 time = t_axis[i]
                 period = time/T
                 if period > T_start and period < T_stop:
-                    time_slice = [t_axis[i], np.transpose(task_grid[i])]
+                    task_ts.append(time)
+                    time_slice = np.transpose(task_grid[i])
                     task_tseries.append(time_slice)
-    dsets.append(task_tseries)
+    dsets.append(np.array(task_tseries))
+    t_s.append(np.array(task_ts))
+
+print(dsets[0].shape)
+t = t_s[0]
+x = x_axis
+z = z_axis
+
+## Step 1
+print('taking FT in time')
+ft_t_data = FT_in_time(t, x, z, dsets[3], dt)
 
 # Create array of dictionaries for items to be plotted
 plot_data = [
-            {'data':   dsets[0],
-            'name':   tasks[0]},
-
-            {'data':   dsets[1],
-             'name':   tasks[1]},
-
-            {'data':   dsets[2],
-             'name':   tasks[2]},
-
             {'data':   dsets[3],
-             'name':   tasks[3]}
+            'name':   tasks[3]},
+
+            # {'data':   dsets[1],
+            #  'name':   tasks[1]},
+            #
+            # {'data':   dsets[2],
+            #  'name':   tasks[2]},
+
+            {'data':   ft_t_data.real,
+             'name':   'iFT of w'}
             ]
 
-p2DCD.plot_frames(plot_data, t_axis, T, x_axis, z_axis, name, output_path)
+p2DCD.plot_frames(plot_data, t, T, x_axis, z_axis, name, output_path)

@@ -161,9 +161,9 @@ def latex_exp(num, pos=None):
 ###############################################################################
 
 # Main plotting function - called by other script
-def plot_frames(plt_data, t_axis, T, x_axis, z_axis, name, output_path):
+def plot_frames(plt_data, times, T, x_axis, z_axis, name, output_path):
     # Find length of time series
-    t_len = len(plt_data[0]['data'])
+    t_len = len(times)
     print('t_len = ', t_len)
     # Find number of subplots
     n_plots = int(len(plt_data))
@@ -199,11 +199,9 @@ def plot_frames(plt_data, t_axis, T, x_axis, z_axis, name, output_path):
                     ax = axes[j]
             else:
                 ax = axes[j//cols, j%cols]
-            make_one_subplot(fig, ax, x_axis, z_axis, plt_data[j]['data'][i][1], plt_data[j]['name'], cmap, AR)
-        # for j in range(len(tasks)):
-        #     plot_task(fig, ax, rows, cols, i, j, x_axis, z_axis, dsets, cmap, AR)
+            make_one_subplot(fig, ax, x_axis, z_axis, plt_data[j]['data'][i], plt_data[j]['name'], cmap, AR)
         # Add title for overall figure
-        t = plt_data[0]['data'][i][0]
+        t = times[i]
         current_T = t/T
         title_str = '{:}, $t/T=${:2.2f}'
         fig.suptitle(title_str.format(name, current_T), fontsize=suptitle_size)
