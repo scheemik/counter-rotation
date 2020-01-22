@@ -54,7 +54,7 @@ snapshot_path="snapshots"
 # Name of merging file
 merge_file="merge.py"
 # Name of plotting file
-plot_file="plot_t_slices.py"
+plot_file="plot_2D_CD.py"
 # Name of output directory
 output_dir="outputs"
 # Path to frames
@@ -99,7 +99,7 @@ then
 		exit 1
 	fi
 	# Check if snapshots have already been merged
-	if [ -e $snapshot_path/snapshots_s1.h5 ]
+	if [ -e $snapshot_path/snapshots_s1.h5 ] || [ -e $snapshot_path/snapshots_s01.h5 ]
 	then
 		echo "Snapshots already merged"
 	else
@@ -108,14 +108,20 @@ then
 	fi
     echo 'Done merging snapshots'
 
-	# Reformat snapshot file names
-	echo 'Reformatting snapshot file names'
-	for i in {1..9..1}
-	do
-		old_name=${snapshot_path}/snapshots_s${i}.h5
-		new_name=${snapshot_path}/snapshots_s0${i}.h5
-		mv $old_name $new_name
-	done
+	# Reformat snapshot file names if necessary
+	if [ -e $snapshot_path/snapshots_s10.h5 ]
+	then
+		echo 'Reformatting snapshot file names'
+		for i in {1..9..1}
+		do
+			if [ -e $snapshot_path/snapshots_s${i}.h5 ]
+			then
+				old_name=${snapshot_path}/snapshots_s${i}.h5
+				new_name=${snapshot_path}/snapshots_s0${i}.h5
+				mv $old_name $new_name
+			fi
+		done
+	fi
 fi
 
 
