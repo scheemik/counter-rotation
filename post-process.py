@@ -49,10 +49,9 @@ import plot_2D_CD as p2DCD
 
 # Parameters
 tasks = ['b', 'p', 'u', 'w']
-round_to_decimal = 1
 T = 8.885765876316732
 T_start = 11
-T_stop  = 19
+T_stop  = 14
 
 ###############################################################################
 
@@ -85,4 +84,19 @@ for task in tasks:
                     task_tseries.append(time_slice)
     dsets.append(task_tseries)
 
-p2DCD.plot_frames(dsets, t_axis, x_axis, z_axis, name, output_path)
+# Create array of dictionaries for items to be plotted
+plot_data = [
+            {'data':   dsets[0],
+            'name':   tasks[0]},
+
+            {'data':   dsets[1],
+             'name':   tasks[1]},
+
+            {'data':   dsets[2],
+             'name':   tasks[2]},
+
+            {'data':   dsets[3],
+             'name':   tasks[3]}
+            ]
+
+p2DCD.plot_frames(plot_data, t_axis, T, x_axis, z_axis, name, output_path)

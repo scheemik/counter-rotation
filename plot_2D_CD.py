@@ -40,18 +40,15 @@ vert_label = r'$z$ (m)'
 
 # Parameters
 dpi = 100
-tasks = ['w'] # usually 'b', 'p', 'u', or 'w'
-rows = 1
-cols = 2
+# tasks = ['w'] # usually 'b', 'p', 'u', or 'w'
+# rows = 1
+# cols = 2
 cmap = 'RdBu_r'
 n_ticks = 5
 n_cb_ticks = 3
 round_to_decimal = 1
 title_size = 'medium'
 suptitle_size = 'large'
-T = 8.885765876316732
-T_start = 11
-T_stop  = 19
 
 ###############################################################################
 # Helper functions
@@ -163,59 +160,50 @@ def latex_exp(num, pos=None):
 
 ###############################################################################
 
-# dsets will be an array containing all the data
-#   it will have a size of: tasks x timesteps x 2 x nx x nz (5D)
-#   where timesteps is the number of time slices between T start and stop
-# dsets = []
-# for task in tasks:
-#     task_tseries = []
-#     for filename in h5_files:
-#         #print(filename)
-#         with h5py.File(filename, mode='r') as f:
-#             dset = f['tasks'][task]
-#             # Check dimensionality of data
-#             if len(dset.shape) != 3:
-#                 raise ValueError("This only works for 3D datasets")
-#             # The [()] syntax returns all data from an h5 object
-#             task_grid = np.array(dset[()])
-#             x_scale = f['scales']['x']['1.0']
-#             x_axis = np.array(x_scale[()])
-#             z_scale = f['scales']['z']['1.0']
-#             z_axis = np.array(z_scale[()])
-#             t_scale = f['scales']['sim_time']
-#             t_axis = np.array(t_scale[()])
-#             for i in range(len(t_axis)):
-#                 time = t_axis[i]
-#                 period = time/T
-#                 if period > T_start and period < T_stop:
-#                     time_slice = [t_axis[i], np.transpose(task_grid[i])]
-#                     task_tseries.append(time_slice)
-#     dsets.append(task_tseries)
-
 # Main plotting function - called by other script
-def plot_frames(dsets, t_axis, x_axis, z_axis, name, output_path):
+def plot_frames(plt_data, t_axis, T, x_axis, z_axis, name, output_path):
     # Find length of time series
-    t_len = len(dsets[0])
+    t_len = len(plt_data[0]['data'])
+    print('t_len = ', t_len)
+    # Find number of subplots
+    n_plots = int(len(plt_data))
 
     # Calculate aspect ratio of plot based on extent
     extent_aspect = abs((x_axis[-1]-x_axis[0])/(z_axis[-1]-z_axis[0]))
     aspect_ratio = 1
     AR = extent_aspect/aspect_ratio
 
+    # Select number of rows and columns - kinda hacky
+    rows = (n_plots-1)//3 + 1
+    if rows == 1:
+        cols = (n_plots-1)%3 + 1
+    else:
+        cols = (n_plots + 1)//rows
+
+    print('rows = ',rows)
+    print('cols = ',cols)
+
     # Iterate across time, plotting and saving a frame for each timestep
     for i in range(t_len):
-        fig, ax = plt.subplots(nrows=rows, ncols=cols)
+        fig, axes = plt.subplots(nrows=rows, ncols=cols)
         # Set aspect ratio for figure
         size_factor = 4.0
         w, h = cols*size_factor, (rows+0.4)*size_factor
         plt.gcf().set_size_inches(w, h)
         # Plot each task
-        make_one_subplot(fig, ax[0], x_axis, z_axis, dsets[0][i][1], 'b', cmap, AR)
-        make_one_subplot(fig, ax[1], x_axis, z_axis, dsets[3][i][1], 'w', cmap, AR)
+        for j in range(n_plots):
+            if rows==1 or cols==1:
+                if rows==1 and cols==1:
+                    ax = axes
+                else:
+                    ax = axes[j]
+            else:
+                ax = axes[j//cols, j%cols]
+            make_one_subplot(fig, ax, x_axis, z_axis, plt_data[j]['data'][i][1], plt_data[j]['name'], cmap, AR)
         # for j in range(len(tasks)):
         #     plot_task(fig, ax, rows, cols, i, j, x_axis, z_axis, dsets, cmap, AR)
         # Add title for overall figure
-        t = dsets[0][i][0]
+        t = plt_data[0]['data'][i][0]
         current_T = t/T
         title_str = '{:}, $t/T=${:2.2f}'
         fig.suptitle(title_str.format(name, current_T), fontsize=suptitle_size)
