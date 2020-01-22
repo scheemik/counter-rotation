@@ -54,7 +54,7 @@ snapshot_path="snapshots"
 # Name of merging file
 merge_file="merge.py"
 # Name of plotting file
-plot_file="plot_2D_CD.py"
+plot_file="post-process.py"
 # Name of output directory
 output_dir="outputs"
 # Path to frames

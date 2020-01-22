@@ -2,15 +2,6 @@
 Performs and plots complex demodulation in 2 spatial dimensions
 Based on Mercier et al. 2008
 
-To run:
-mpiexec -n 2 python3 plot_2D_CD.py NAME snapshots/*.h5
-
-Usage:
-    plot_2D_CD.py NAME <files>... [--output=<dir>]
-
-Options:
-    NAME            # Name to put in plot title
-    --output=<dir>  # Output directory [default: ./frames]
 
 Written by Mikhail Schee
 Jan 2020
@@ -30,18 +21,18 @@ comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 
 # Parse input parameters
-from docopt import docopt
-args = docopt(__doc__)
-name = args['NAME']
-h5_files = args['<files>']
-import pathlib
-output_path = pathlib.Path(args['--output']).absolute()
+# from docopt import docopt
+# args = docopt(__doc__)
+# name = args['NAME']
+# h5_files = args['<files>']
+# import pathlib
+# output_path = pathlib.Path(args['--output']).absolute()
 
 # Check if output path exists, if not, create it
-import os
-if not os.path.exists(output_path):
-    if rank==0:
-        os.makedirs(output_path)
+# import os
+# if not os.path.exists(output_path):
+#     if rank==0:
+#         os.makedirs(output_path)
 
 # Labels
 hori_label = r'$x$ (m)'
@@ -51,7 +42,7 @@ vert_label = r'$z$ (m)'
 dpi = 100
 tasks = ['w'] # usually 'b', 'p', 'u', or 'w'
 rows = 1
-cols = 1
+cols = 2
 cmap = 'RdBu_r'
 n_ticks = 5
 n_cb_ticks = 3
@@ -90,7 +81,24 @@ def plot_task(fig, axes, rows, cols, time_i, task_j, x_ax, z_ax, dsets, cmap, AR
     # add title
     cax.set_title(tasks[task_j], fontsize=title_size)
 
-def format_colorbar(image, axis, cmax):
+# Make a plot for one task
+def make_one_subplot(fig, ax, x_ax, z_ax, data, title, cmap, AR):
+    # plot task colormesh
+    im = ax.pcolormesh(x_ax, z_ax, data, cmap=cmap)
+    # format axis labels and ticks
+    format_labels_and_ticks(ax)
+    # Find max of absolute value for colorbar for limits symmetric around zero
+    cmax = max(abs(max(data.flatten())), abs(min(data.flatten())))
+    if cmax==0.0:
+        cmax = 0.001 # to avoid the weird jump with the first frame
+    # format colorbar
+    cax = format_colorbar(im, fig, ax, cmax)
+    # Set aspect ratio for plot
+    ax.set_aspect(AR)
+    # add title
+    cax.set_title(title, fontsize=title_size)
+
+def format_colorbar(image, fig, axis, cmax):
     # this is the only way I found to put the colorbar on top of the plot
     divider = make_axes_locatable(axis)
     caxis = divider.append_axes('top', size='5%', pad=0.03)
@@ -158,56 +166,61 @@ def latex_exp(num, pos=None):
 # dsets will be an array containing all the data
 #   it will have a size of: tasks x timesteps x 2 x nx x nz (5D)
 #   where timesteps is the number of time slices between T start and stop
-dsets = []
-for task in tasks:
-    task_tseries = []
-    for filename in h5_files:
-        #print(filename)
-        with h5py.File(filename, mode='r') as f:
-            dset = f['tasks'][task]
-            # Check dimensionality of data
-            if len(dset.shape) != 3:
-                raise ValueError("This only works for 3D datasets")
-            # The [()] syntax returns all data from an h5 object
-            task_grid = np.array(dset[()])
-            x_scale = f['scales']['x']['1.0']
-            x_axis = np.array(x_scale[()])
-            z_scale = f['scales']['z']['1.0']
-            z_axis = np.array(z_scale[()])
-            t_scale = f['scales']['sim_time']
-            t_axis = np.array(t_scale[()])
-            for i in range(len(t_axis)):
-                time = t_axis[i]
-                period = time/T
-                if period > T_start and period < T_stop:
-                    time_slice = [t_axis[i], np.transpose(task_grid[i])]
-                    task_tseries.append(time_slice)
-    dsets.append(task_tseries)
+# dsets = []
+# for task in tasks:
+#     task_tseries = []
+#     for filename in h5_files:
+#         #print(filename)
+#         with h5py.File(filename, mode='r') as f:
+#             dset = f['tasks'][task]
+#             # Check dimensionality of data
+#             if len(dset.shape) != 3:
+#                 raise ValueError("This only works for 3D datasets")
+#             # The [()] syntax returns all data from an h5 object
+#             task_grid = np.array(dset[()])
+#             x_scale = f['scales']['x']['1.0']
+#             x_axis = np.array(x_scale[()])
+#             z_scale = f['scales']['z']['1.0']
+#             z_axis = np.array(z_scale[()])
+#             t_scale = f['scales']['sim_time']
+#             t_axis = np.array(t_scale[()])
+#             for i in range(len(t_axis)):
+#                 time = t_axis[i]
+#                 period = time/T
+#                 if period > T_start and period < T_stop:
+#                     time_slice = [t_axis[i], np.transpose(task_grid[i])]
+#                     task_tseries.append(time_slice)
+#     dsets.append(task_tseries)
 
-# Find length of time series
-t_len = len(dsets[0])
+# Main plotting function - called by other script
+def plot_frames(dsets, t_axis, x_axis, z_axis, name, output_path):
+    # Find length of time series
+    t_len = len(dsets[0])
 
-# Calculate aspect ratio of plot based on extent
-extent_aspect = abs((x_axis[-1]-x_axis[0])/(z_axis[-1]-z_axis[0]))
-aspect_ratio = 1
-AR = extent_aspect/aspect_ratio
+    # Calculate aspect ratio of plot based on extent
+    extent_aspect = abs((x_axis[-1]-x_axis[0])/(z_axis[-1]-z_axis[0]))
+    aspect_ratio = 1
+    AR = extent_aspect/aspect_ratio
 
-# Iterate across time, plotting and saving a frame for each timestep
-for i in range(t_len):
-    fig, ax = plt.subplots(nrows=rows, ncols=cols)
-    # Set aspect ratio for figure
-    size_factor = 4.0
-    w, h = cols*size_factor, (rows+0.4)*size_factor
-    plt.gcf().set_size_inches(w, h)
-    # Plot each task
-    for j in range(len(tasks)):
-        plot_task(fig, ax, rows, cols, i, j, x_axis, z_axis, dsets, cmap, AR)
-    # Add title for overall figure
-    t = dsets[0][i][0]
-    current_T = t/T
-    title_str = '{:}, $t/T=${:2.2f}'
-    fig.suptitle(title_str.format(name, current_T), fontsize=suptitle_size)
-    fig.tight_layout() # this (mostly) prevents axis labels from overlapping
-    # Save figure as image in designated output directory
-    save_fig_as_frame(fig, i, output_path, dpi)
-    plt.close(fig)
+    # Iterate across time, plotting and saving a frame for each timestep
+    for i in range(t_len):
+        fig, ax = plt.subplots(nrows=rows, ncols=cols)
+        # Set aspect ratio for figure
+        size_factor = 4.0
+        w, h = cols*size_factor, (rows+0.4)*size_factor
+        plt.gcf().set_size_inches(w, h)
+        # Plot each task
+        make_one_subplot(fig, ax[0], x_axis, z_axis, dsets[0][i][1], 'b', cmap, AR)
+        make_one_subplot(fig, ax[1], x_axis, z_axis, dsets[3][i][1], 'w', cmap, AR)
+        # for j in range(len(tasks)):
+        #     plot_task(fig, ax, rows, cols, i, j, x_axis, z_axis, dsets, cmap, AR)
+        # Add title for overall figure
+        t = dsets[0][i][0]
+        current_T = t/T
+        title_str = '{:}, $t/T=${:2.2f}'
+        fig.suptitle(title_str.format(name, current_T), fontsize=suptitle_size)
+        # this (mostly) prevents axis labels from overlapping
+        fig.tight_layout()
+        # Save figure as image in designated output directory
+        save_fig_as_frame(fig, i, output_path, dpi)
+        plt.close(fig)
