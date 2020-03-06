@@ -41,15 +41,15 @@ kappa       = 1.4E-7        # [m^2/s] Thermal diffusivity
 g           = 9.81          # [m/s^2] Acceleration due to gravity
 
 # Boundary forcing parameters
-firstop = False
+firstop = False # first option
 N_0     = 1.0                   # [rad/s]
-if firstop:
+if firstop:     # specify k and omega, calculate the rest
     k       = 45                    # [m^-1]
     omega   = 0.7071                # [rad s^-1]
     theta   = np.arccos(omega/N_0)  # [rad]
     k_x     = k*omega/N_0           # [m^-1]
     lam_x   = 2*np.pi / k_x         # [m]
-else:
+else:           # specify theta and lam_x, calculate the rest
     theta   = np.pi / 4.0 #(45deg)  # [rad]
     lam_x   = (xf - x0) / 2.0       # [m]
     k_x     = 2*np.pi / lam_x       # [m^-1]
@@ -70,20 +70,26 @@ snap_max_writes = 50
 
 ###############################################################################
 
+fourier_fourier = False
+
 # Create bases and domain
 x_basis = de.Fourier('x', nx, interval=(x0, xf), dealias=3/2)
-z_basis = de.Fourier('z', nz, interval=(z0, zf), dealias=3/2)
-#z_basis = de.Chebyshev('z', nz, interval=(z0, zf), dealias=3/2)
+if fourier_fourier:
+    z_basis = de.Fourier('z', nz, interval=(z0, zf), dealias=3/2)
+else:
+    z_basis = de.Chebyshev('z', nz, interval=(z0, zf), dealias=3/2)
 domain = de.Domain([x_basis, z_basis], grid_dtype=np.float64)
 x = domain.grid(0)
 z = domain.grid(1)
 
 # 2D Boussinesq hydrodynamics
-problem = de.IVP(domain, variables=['p','b','u','w'])
-#problem = de.IVP(domain, variables=['p','b','u','w','bz','uz','wz'])
-#   variables are dirichlet by default
-#problem.meta['p']['z']['dirichlet'] = False
-#problem.meta['p','bz','uz','wz']['z']['dirichlet'] = False
+if fourier_fourier:
+    problem = de.IVP(domain, variables=['p','b','u','w'])
+else:
+    problem = de.IVP(domain, variables=['p','b','u','w','bz','uz','wz'])
+    #   variables are dirichlet by default
+    problem.meta['p']['z']['dirichlet'] = False
+    problem.meta['p','bz','uz','wz']['z']['dirichlet'] = False
 problem.parameters['NU'] = nu
 problem.parameters['KA'] = kappa
 problem.parameters['N0'] = N_0
@@ -125,32 +131,33 @@ problem.substitutions['fb']     = "-BFb*cos(kx*x + kz*z - omega*t)*window*ramp"
 
 ###############################################################################
 # Equations of motion (non-linear terms on RHS)
-problem.add_equation("dx(u) + dz(w) = 0")
-# problem.add_equation("dx(u) + wz = 0")
-problem.add_equation("dt(b) - KA*(dx(dx(b)) + dz(dz(b)))" \
-                + "= -(N0**2)*w - (u*dx(b) + w*dz(b))")
-# problem.add_equation("dt(b) - KA*(dx(dx(b)) + dz(bz))" \
-#                 + "= -(N0**2)*w - (u*dx(b) + w*bz)")
-problem.add_equation("dt(u) -NU*dx(dx(u)) - NU*dz(dz(u)) + dx(p)" \
-                + "= - (u*dx(u) + w*dz(u))")
-# problem.add_equation("dt(u) -NU*dx(dx(u)) - NU*dz(uz) + dx(p)" \
-#                 + "= - (u*dx(u) + w*uz)")
-problem.add_equation("dt(w) -NU*dx(dx(w)) - NU*dz(dz(w)) + dz(p) - b" \
-                + "= - (u*dx(w) + w*dz(w))")
-# problem.add_equation("dt(w) -NU*dx(dx(w)) - NU*dz(wz) + dz(p) - b" \
-#                 + "= - (u*dx(w) + w*wz)")
-# problem.add_equation("bz - dz(b) = 0")
-# problem.add_equation("uz - dz(u) = 0")
-# problem.add_equation("wz - dz(w) = 0")
-
-# Boundary contitions
-# problem.add_bc("left(u) = 0")
-# problem.add_bc("right(u) = right(fu)")
-# problem.add_bc("left(w) = 0", condition="(nx != 0)")
-# problem.add_bc("right(w) = right(fw)")
-# problem.add_bc("left(b) = 0")
-# problem.add_bc("right(b) = right(fb)")
-# problem.add_bc("left(p) = 0", condition="(nx == 0)")
+if fourier_fourier:
+    problem.add_equation("dx(u) + dz(w) = 0")
+    problem.add_equation("dt(b) - KA*(dx(dx(b)) + dz(dz(b)))" \
+                    + "= -(N0**2)*w - (u*dx(b) + w*dz(b))")
+    problem.add_equation("dt(u) -NU*dx(dx(u)) - NU*dz(dz(u)) + dx(p)" \
+                    + "= - (u*dx(u) + w*dz(u))")
+    problem.add_equation("dt(w) -NU*dx(dx(w)) - NU*dz(dz(w)) + dz(p) - b" \
+                    + "= - (u*dx(w) + w*dz(w))")
+else:
+    problem.add_equation("dx(u) + wz = 0")
+    problem.add_equation("dt(b) - KA*(dx(dx(b)) + dz(bz))" \
+                    + "= -(N0**2)*w - (u*dx(b) + w*bz)")
+    problem.add_equation("dt(u) -NU*dx(dx(u)) - NU*dz(uz) + dx(p)" \
+                    + "= - (u*dx(u) + w*uz)")
+    problem.add_equation("dt(w) -NU*dx(dx(w)) - NU*dz(wz) + dz(p) - b" \
+                    + "= - (u*dx(w) + w*wz)")
+    problem.add_equation("bz - dz(b) = 0")
+    problem.add_equation("uz - dz(u) = 0")
+    problem.add_equation("wz - dz(w) = 0")
+    # Boundary contitions
+    problem.add_bc("left(u) = 0")
+    problem.add_bc("right(u) = right(fu)")
+    problem.add_bc("left(w) = 0", condition="(nx != 0)")
+    problem.add_bc("right(w) = right(fw)")
+    problem.add_bc("left(b) = 0")
+    problem.add_bc("right(b) = right(fb)")
+    problem.add_bc("left(p) = 0", condition="(nx == 0)")
 
 # Build solver
 solver = problem.build_solver(de.timesteppers.RK222)
@@ -163,7 +170,8 @@ if not pathlib.Path('restart.h5').exists():
     b = solver.state['b']
     u = solver.state['u']
     w = solver.state['w']
-    #bz = solver.state['bz']
+    if not fourier_fourier:
+        bz = solver.state['bz']
 
     # Random perturbations, initialized globally for same results in parallel
     gshape = domain.dist.grid_layout.global_shape(scales=1)
@@ -177,7 +185,8 @@ if not pathlib.Path('restart.h5').exists():
     b['g'] = 0.0
     u['g'] = 0.0
     w['g'] = 0.0
-    #b.differentiate('z', out=bz)
+    if not fourier_fourier:
+        b.differentiate('z', out=bz)
 
     # Output
     fh_mode = 'overwrite'
