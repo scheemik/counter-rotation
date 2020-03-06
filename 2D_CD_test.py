@@ -13,11 +13,11 @@ import matplotlib.pyplot as plt
 #from sympy import *
 import sys
 
-def plot_t_slice(hori, vert, data, fig, ax, h_label, v_label, title):
-    im = ax.pcolormesh(hori, vert, data, shading='gouraud')
-    ax.set_xlabel(h_label)
-    ax.set_ylabel(v_label)
-    ax.set_title(title)
+def plot_t_slice(hori, vert, data, fig, ax, h_label, v_label, title, t_font, b_font):
+    im = ax.pcolormesh(hori, vert, data, cmap='RdBu_r', shading='gouraud')
+    ax.set_xlabel(h_label, **b_font)
+    ax.set_ylabel(v_label, **b_font)
+    ax.set_title(title, **t_font)
     fig.colorbar(im, ax=ax)
     return im
 
@@ -115,8 +115,8 @@ kx    = 2.0
 kz    = 2.0
 A = 1.0
 B = A * 1
-C = A * 1.1
-D = A * 0.7
+C = A * 0
+D = A * 0
 
 # number of oscillation periods
 n_o = 4
@@ -182,6 +182,9 @@ y_cd = up_cd + dn_cd
 # sys.exit('stopping exeuction')
 plot_frames = True
 
+title_font = {'fontname':'RobotoBold'}
+body_font = {'fontname':'EBGaramond08'}
+
 if plot_frames == True:
     n_frames = int(len(t)/n_o)
     print('Now plotting ' + str(n_frames) + ' frames')
@@ -196,12 +199,12 @@ if plot_frames == True:
         title_str = '{:}, $t=${:2.2f}'
         fig.suptitle(title_str.format(name, t[i]))
         # Plot
-        plot_t_slice(xm[i], zm[i], y[i], fig, ax[0][0], r'$x$', r'$z$', r'OG')
-        plot_t_slice(xm[i], zm[i], y[i]-y_cd[i], fig, ax[0][1], r'$x$', r'$z$', r'Total Diff')
-        plot_t_slice(xm[i], zm[i], up[i]-up_cd[i], fig, ax[1][0], r'$x$', r'$z$', r'Up Diff')
-        plot_t_slice(xm[i], zm[i], dn[i]-dn_cd[i], fig, ax[1][1], r'$x$', r'$z$', r'Down Diff')
-        # plot_t_slice(xm[i], zm[i], A_cd[i].real, fig, ax[0][0], r'$x$', r'$z$', r'A')
-        # plot_t_slice(xm[i], zm[i], B_cd[i].real, fig, ax[0][1], r'$x$', r'$z$', r'B')
+        plot_t_slice(xm[i], zm[i], y[i], fig, ax[0][0], r'$x$', r'$z$', r'Input', title_font, body_font)
+        plot_t_slice(xm[i], zm[i], y_cd[i], fig, ax[0][1], r'$x$', r'$z$', r'Output', title_font, body_font)
+        # plot_t_slice(xm[i], zm[i], up[i]-up_cd[i], fig, ax[1][0], r'$x$', r'$z$', r'Up Diff')
+        # plot_t_slice(xm[i], zm[i], dn[i]-dn_cd[i], fig, ax[1][1], r'$x$', r'$z$', r'Down Diff')
+        plot_t_slice(xm[i], zm[i], A_cd[i].real, fig, ax[1][0], r'$x$', r'$z$', r'$\tilde{A}$', title_font, body_font)
+        plot_t_slice(xm[i], zm[i], B_cd[i].real, fig, ax[1][1], r'$x$', r'$z$', r'$\tilde{B}$', title_font, body_font)
         # plot_t_slice(xm[i], zm[i], C_cd[i].real, fig, ax[1][0], r'$x$', r'$z$', r'C')
         # plot_t_slice(xm[i], zm[i], D_cd[i].real, fig, ax[1][1], r'$x$', r'$z$', r'D')
         fig.tight_layout() # this (mostly) prevents axis labels from overlapping
