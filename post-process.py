@@ -50,8 +50,8 @@ import plot_2D_CD as p2DCD
 # Parameters
 tasks = ['b', 'p', 'u', 'w']
 T = 8.885765876316732
-T_start = 11
-T_stop  = 14
+T_start = 0
+T_stop  = 3
 dt = 0.125
 
 ###############################################################################
@@ -115,22 +115,22 @@ x = x_axis
 z = z_axis
 
 ## Step 1
-print('taking FT in time')
-ft_t_data = FT_in_time(t, x, z, dsets[3], dt)
+# print('taking FT in time')
+# ft_t_data = FT_in_time(t, x, z, dsets[3], dt)
 
 # Create array of dictionaries for items to be plotted
 plot_data = [
+            {'data':   dsets[0],
+            'name':    tasks[0]},
+
+            {'data':   dsets[1],
+             'name':   tasks[1]},
+
+            {'data':   dsets[2],
+             'name':   tasks[2]},
+
             {'data':   dsets[3],
-            'name':   tasks[3]},
-
-            # {'data':   dsets[1],
-            #  'name':   tasks[1]},
-            #
-            # {'data':   dsets[2],
-            #  'name':   tasks[2]},
-
-            {'data':   ft_t_data.real,
-             'name':   'iFT of w'}
+             'name':   tasks[3]'}
             ]
 
 p2DCD.plot_frames(plot_data, t, T, x_axis, z_axis, name, output_path)
