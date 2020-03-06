@@ -62,7 +62,7 @@ T       = 2*np.pi / omega       # [s]
 print('T =', T)
 
 # Run parameters
-stop_sim_time = 25*T
+stop_sim_time = 5*T
 dt = 0.125
 adapt_dt = False
 snap_dt = 3*dt
@@ -72,15 +72,18 @@ snap_max_writes = 50
 
 # Create bases and domain
 x_basis = de.Fourier('x', nx, interval=(x0, xf), dealias=3/2)
-z_basis = de.Chebyshev('z', nz, interval=(z0, zf), dealias=3/2)
+z_basis = de.Fourier('z', nz, interval=(z0, zf), dealias=3/2)
+#z_basis = de.Chebyshev('z', nz, interval=(z0, zf), dealias=3/2)
 domain = de.Domain([x_basis, z_basis], grid_dtype=np.float64)
 x = domain.grid(0)
 z = domain.grid(1)
 
 # 2D Boussinesq hydrodynamics
-problem = de.IVP(domain, variables=['p','b','u','w','bz','uz','wz'])
+problem = de.IVP(domain, variables=['p','b','u','w'])
+#problem = de.IVP(domain, variables=['p','b','u','w','bz','uz','wz'])
 #   variables are dirichlet by default
-problem.meta['p','bz','uz','wz']['z']['dirichlet'] = False
+#problem.meta['p']['z']['dirichlet'] = False
+#problem.meta['p','bz','uz','wz']['z']['dirichlet'] = False
 problem.parameters['NU'] = nu
 problem.parameters['KA'] = kappa
 problem.parameters['N0'] = N_0
@@ -111,34 +114,43 @@ for fld in ['u', 'w', 'b']:#, 'p']:
     problem.parameters['BF' + fld] = BF  # pass function in as a parameter.
     del BF
 # Substitutions for boundary forcing (see C-R & B eq 13.7)
-problem.substitutions['window'] = "1"
+#problem.substitutions['window'] = "1"
 #problem.substitutions['window'] = "(1/2)*(tanh(slope*(x-left_edge))+1)*(1/2)*(tanh(slope*(-x+right_edge))+1)"
+problem.substitutions['window'] = "1.0*exp(-((x-0.5)**2/0.2 + (z+0.5)**2/0.2))"
 problem.substitutions['ramp']   = "(1/2)*(tanh(4*t/(nT*T) - 2) + 1)"
+
 problem.substitutions['fu']     = "-BFu*sin(kx*x + kz*z - omega*t)*window*ramp"
 problem.substitutions['fw']     = " BFw*sin(kx*x + kz*z - omega*t)*window*ramp"
 problem.substitutions['fb']     = "-BFb*cos(kx*x + kz*z - omega*t)*window*ramp"
 
 ###############################################################################
 # Equations of motion (non-linear terms on RHS)
-problem.add_equation("dx(u) + wz = 0")
-problem.add_equation("dt(b) - KA*(dx(dx(b)) + dz(bz))" \
-                + "= -(N0**2)*w - (u*dx(b) + w*bz)")
-problem.add_equation("dt(u) -NU*dx(dx(u)) - NU*dz(uz) + dx(p)" \
-                + "= - (u*dx(u) + w*uz)")
-problem.add_equation("dt(w) -NU*dx(dx(w)) - NU*dz(wz) + dz(p) - b" \
-                + "= - (u*dx(w) + w*wz)")
-problem.add_equation("bz - dz(b) = 0")
-problem.add_equation("uz - dz(u) = 0")
-problem.add_equation("wz - dz(w) = 0")
+problem.add_equation("dx(u) + dz(w) = 0")
+# problem.add_equation("dx(u) + wz = 0")
+problem.add_equation("dt(b) - KA*(dx(dx(b)) + dz(dz(b)))" \
+                + "= -(N0**2)*w - (u*dx(b) + w*dz(b))")
+# problem.add_equation("dt(b) - KA*(dx(dx(b)) + dz(bz))" \
+#                 + "= -(N0**2)*w - (u*dx(b) + w*bz)")
+problem.add_equation("dt(u) -NU*dx(dx(u)) - NU*dz(dz(u)) + dx(p)" \
+                + "= - (u*dx(u) + w*dz(u))")
+# problem.add_equation("dt(u) -NU*dx(dx(u)) - NU*dz(uz) + dx(p)" \
+#                 + "= - (u*dx(u) + w*uz)")
+problem.add_equation("dt(w) -NU*dx(dx(w)) - NU*dz(dz(w)) + dz(p) - b" \
+                + "= - (u*dx(w) + w*dz(w))")
+# problem.add_equation("dt(w) -NU*dx(dx(w)) - NU*dz(wz) + dz(p) - b" \
+#                 + "= - (u*dx(w) + w*wz)")
+# problem.add_equation("bz - dz(b) = 0")
+# problem.add_equation("uz - dz(u) = 0")
+# problem.add_equation("wz - dz(w) = 0")
 
 # Boundary contitions
-problem.add_bc("left(u) = 0")
-problem.add_bc("right(u) = right(fu)")
-problem.add_bc("left(w) = 0", condition="(nx != 0)")
-problem.add_bc("right(w) = right(fw)")
-problem.add_bc("left(b) = 0")
-problem.add_bc("right(b) = right(fb)")
-problem.add_bc("left(p) = 0", condition="(nx == 0)")
+# problem.add_bc("left(u) = 0")
+# problem.add_bc("right(u) = right(fu)")
+# problem.add_bc("left(w) = 0", condition="(nx != 0)")
+# problem.add_bc("right(w) = right(fw)")
+# problem.add_bc("left(b) = 0")
+# problem.add_bc("right(b) = right(fb)")
+# problem.add_bc("left(p) = 0", condition="(nx == 0)")
 
 # Build solver
 solver = problem.build_solver(de.timesteppers.RK222)
@@ -149,7 +161,9 @@ if not pathlib.Path('restart.h5').exists():
 
     # Initial conditions
     b = solver.state['b']
-    bz = solver.state['bz']
+    u = solver.state['u']
+    w = solver.state['w']
+    #bz = solver.state['bz']
 
     # Random perturbations, initialized globally for same results in parallel
     gshape = domain.dist.grid_layout.global_shape(scales=1)
@@ -160,8 +174,10 @@ if not pathlib.Path('restart.h5').exists():
     # Linear background + perturbations damped at walls
     zb, zt = z_basis.interval
     pert =  1e-3 * noise * (zt - z) * (z - zb)
-    b['g'] = pert * 0.0
-    b.differentiate('z', out=bz)
+    b['g'] = 0.0
+    u['g'] = 0.0
+    w['g'] = 0.0
+    #b.differentiate('z', out=bz)
 
     # Output
     fh_mode = 'overwrite'
@@ -190,8 +206,8 @@ snapshots = add_new_file_handler('snapshots')
 snapshots.add_system(solver.state)
 
 # Add file handler for Hilbert Transform (HT)
-HT = add_new_file_handler('snapshots/HT')
-HT.add_task("integ(u,'x')", layout='g', name='<u>')
+# HT = add_new_file_handler('snapshots/HT')
+# HT.add_task("integ(u,'x')", layout='g', name='<u>')
 
 ###############################################################################
 
