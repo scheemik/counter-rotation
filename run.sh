@@ -54,7 +54,7 @@ snapshot_path="snapshots"
 # Name of merging file
 merge_file="merge.py"
 # Name of plotting file
-plot_file="post-process.py"
+plot_file="plot_t_slices.py" #"post-process.py"
 # Name of output directory
 output_dir="outputs"
 # Path to frames
