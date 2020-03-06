@@ -54,6 +54,9 @@ title_size = 'medium'
 suptitle_size = 'large'
 T = 8.885765876316732
 
+# number of oscillation periods to skip at the start
+skip_nT = 3
+
 ###############################################################################
 # Helper functions
 
@@ -168,8 +171,10 @@ for task in tasks:
             t_scale = f['scales']['sim_time']
             t_axis = np.array(t_scale[()])
             for i in range(len(t_axis)):
-                time_slice = [t_axis[i], np.transpose(task_grid[i])]
-                task_tseries.append(time_slice)
+                # Skip any times before specified number of T's
+                if(t_axis[i] > skip_nT*T):
+                    time_slice = [t_axis[i], np.transpose(task_grid[i])]
+                    task_tseries.append(time_slice)
     dsets.append(task_tseries)
 
 # Find length of time series
