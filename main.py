@@ -62,7 +62,7 @@ T       = 2*np.pi / omega       # [s]
 print('T =', T)
 
 # Run parameters
-stop_sim_time = 5*T
+stop_sim_time = 3*T
 dt = 0.125
 adapt_dt = False
 snap_dt = 3*dt
@@ -71,6 +71,8 @@ snap_max_writes = 50
 ###############################################################################
 
 fourier_fourier = False
+windowed_boundary_forcing = False
+start_at_steady_state = True
 
 # Create bases and domain
 x_basis = de.Fourier('x', nx, interval=(x0, xf), dealias=3/2)
@@ -93,6 +95,19 @@ else:
 problem.parameters['NU'] = nu
 problem.parameters['KA'] = kappa
 problem.parameters['N0'] = N_0
+
+###############################################################################
+# Adding fields for Complex Demodulation (Hilbert Transform, kinda)
+
+# Get local wavenumbers (from: https://groups.google.com/forum/#!searchin/dedalus-users/new_field$20state%7Csort:date/dedalus-users/-cM7jkfWl68/YtFqpksRCQAJ)
+ks_x = domain.elements(0)
+ks_z = domain.elements(1)
+
+# Positively propagating w field
+w_pos = domain.new_field(name='w_p')
+#w_pos['c'] = w
+# Negatively propagating w field
+w_neg = domain.new_field(name='w_n')
 
 ###############################################################################
 # Forcing from the boundary
@@ -119,12 +134,18 @@ for fld in ['u', 'w', 'b']:#, 'p']:
     BF['g'] = PolRel[fld]
     problem.parameters['BF' + fld] = BF  # pass function in as a parameter.
     del BF
-# Substitutions for boundary forcing (see C-R & B eq 13.7)
-#problem.substitutions['window'] = "1"
-#problem.substitutions['window'] = "(1/2)*(tanh(slope*(x-left_edge))+1)*(1/2)*(tanh(slope*(-x+right_edge))+1)"
-problem.substitutions['window'] = "1.0*exp(-((x-0.5)**2/0.2 + (z+0.5)**2/0.2))"
-problem.substitutions['ramp']   = "(1/2)*(tanh(4*t/(nT*T) - 2) + 1)"
+# Spatial window and temporal ramp for boundary forcing
+if windowed_boundary_forcing:
+    #problem.substitutions['window'] = "(1/2)*(tanh(slope*(x-left_edge))+1)*(1/2)*(tanh(slope*(-x+right_edge))+1)"
+    problem.substitutions['window'] = "1.0*exp(-((x-0.5)**2/0.2 + (z+0.5)**2/0.2))"
+else:
+    problem.substitutions['window'] = "1"
 
+if start_at_steady_state:
+    problem.substitutions['ramp']   = "1"
+else:
+    problem.substitutions['ramp']   = "(1/2)*(tanh(4*t/(nT*T) - 2) + 1)"
+# Substitutions for boundary forcing (see C-R & B eq 13.7)
 problem.substitutions['fu']     = "-BFu*sin(kx*x + kz*z - omega*t)*window*ramp"
 problem.substitutions['fw']     = " BFw*sin(kx*x + kz*z - omega*t)*window*ramp"
 problem.substitutions['fb']     = "-BFb*cos(kx*x + kz*z - omega*t)*window*ramp"
@@ -182,9 +203,15 @@ if not pathlib.Path('restart.h5').exists():
     # Linear background + perturbations damped at walls
     zb, zt = z_basis.interval
     pert =  1e-3 * noise * (zt - z) * (z - zb)
-    b['g'] = 0.0
-    u['g'] = 0.0
-    w['g'] = 0.0
+    if start_at_steady_state:
+        # Reconstructing the substitutions for boundary forcing, sans t
+        b['g'] = -1*PolRel['b']*(np.cos(k_x*x + k_z*z) + np.cos(k_x*x - k_z*z))
+        u['g'] = -1*PolRel['u']*(np.sin(k_x*x + k_z*z) + np.sin(k_x*x - k_z*z))
+        w['g'] =  1*PolRel['w']*(np.sin(k_x*x + k_z*z) + np.sin(k_x*x - k_z*z))
+    else:
+        b['g'] = 0.0
+        u['g'] = 0.0
+        w['g'] = 0.0
     if not fourier_fourier:
         b.differentiate('z', out=bz)
 
@@ -215,8 +242,8 @@ snapshots = add_new_file_handler('snapshots')
 snapshots.add_system(solver.state)
 
 # Add file handler for Hilbert Transform (HT)
-# HT = add_new_file_handler('snapshots/HT')
-# HT.add_task("integ(u,'x')", layout='g', name='<u>')
+HT = add_new_file_handler('snapshots/HT')
+HT.add_task("integ(u,'x')", layout='g', name='<u>')
 
 ###############################################################################
 
