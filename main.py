@@ -41,23 +41,27 @@ kappa       = 1.4E-7        # [m^2/s] Thermal diffusivity
 g           = 9.81          # [m/s^2] Acceleration due to gravity
 
 # Boundary forcing parameters
-firstop = False # first option
+set_lams = True # first option, set lambda's
 N_0     = 1.0                   # [rad/s]
-if firstop:     # specify k and omega, calculate the rest
-    k       = 45                    # [m^-1]
-    omega   = 0.7071                # [rad s^-1]
-    theta   = np.arccos(omega/N_0)  # [rad]
-    k_x     = k*omega/N_0           # [m^-1]
-    lam_x   = 2*np.pi / k_x         # [m]
+if set_lams:    # specify lam_x and lam_z, calculate the rest
+    lam_x   = (xf - x0) / 2.0       # [m]
+    lam_z   = (zf - z0) / 1.5       # [m]
+    #
+    k_x     = 2*np.pi / lam_x       # [m^-1]
+    k_z     = 2*np.pi / lam_z       # [m^-1]
+    k       = np.sqrt(k_x**2 + k_z**2) # [m^-1]
+    theta   = np.arcsin(k_z/k)      # [rad]
+    omega   = N_0 * np.cos(theta)   # [rad s^-1]
 else:           # specify theta and lam_x, calculate the rest
     theta   = np.pi / 4.0 #(45deg)  # [rad]
     lam_x   = (xf - x0) / 2.0       # [m]
+    #
     k_x     = 2*np.pi / lam_x       # [m^-1]
     omega   = N_0 * np.cos(theta)   # [rad s^-1]
     k       = k_x * N_0 / omega     # [m^-1]
+    k_z     = k*np.sin(theta)       # [m^-1]
+    lam_z   = 2*np.pi / k_z         # [m]
 
-k_z     = k*np.sin(theta)       # [m^-1]
-lam_z   = 2*np.pi / k_z         # [m]
 T       = 2*np.pi / omega       # [s]
 print('T =', T)
 
@@ -95,19 +99,6 @@ else:
 problem.parameters['NU'] = nu
 problem.parameters['KA'] = kappa
 problem.parameters['N0'] = N_0
-
-###############################################################################
-# Adding fields for Complex Demodulation (Hilbert Transform, kinda)
-
-# Get local wavenumbers (from: https://groups.google.com/forum/#!searchin/dedalus-users/new_field$20state%7Csort:date/dedalus-users/-cM7jkfWl68/YtFqpksRCQAJ)
-ks_x = domain.elements(0)
-ks_z = domain.elements(1)
-
-# Positively propagating w field
-w_pos = domain.new_field(name='w_p')
-#w_pos['c'] = w
-# Negatively propagating w field
-w_neg = domain.new_field(name='w_n')
 
 ###############################################################################
 # Forcing from the boundary
@@ -184,15 +175,31 @@ else:
 solver = problem.build_solver(de.timesteppers.RK222)
 logger.info('Solver built')
 
+###############################################################################
+# Adding fields for Complex Demodulation (Hilbert Transform, kinda)
+
+# Reference local grid and state fields
+b = solver.state['b']
+u = solver.state['u']
+w = solver.state['w']
+if not fourier_fourier:
+    bz = solver.state['bz']
+
+# Get local wavenumbers (from: https://groups.google.com/forum/#!searchin/dedalus-users/new_field$20state%7Csort:date/dedalus-users/-cM7jkfWl68/YtFqpksRCQAJ)
+ks_x = domain.elements(0)
+ks_z = domain.elements(1)
+
+# Testing
+w_g = domain.new_field(name='w_g')
+w_g['g'] = w['g']
+w_c = domain.new_field(name='w_c')
+w_c['c'] = w['c']
+
+###############################################################################
+
 # Initial conditions or restart
 if not pathlib.Path('restart.h5').exists():
-
     # Initial conditions
-    b = solver.state['b']
-    u = solver.state['u']
-    w = solver.state['w']
-    if not fourier_fourier:
-        bz = solver.state['bz']
 
     # Random perturbations, initialized globally for same results in parallel
     gshape = domain.dist.grid_layout.global_shape(scales=1)
@@ -205,9 +212,9 @@ if not pathlib.Path('restart.h5').exists():
     pert =  1e-3 * noise * (zt - z) * (z - zb)
     if start_at_steady_state:
         # Reconstructing the substitutions for boundary forcing, sans t
-        b['g'] = -1*PolRel['b']*(np.cos(k_x*x + k_z*z) + np.cos(k_x*x - k_z*z))
-        u['g'] = -1*PolRel['u']*(np.sin(k_x*x + k_z*z) + np.sin(k_x*x - k_z*z))
-        w['g'] =  1*PolRel['w']*(np.sin(k_x*x + k_z*z) + np.sin(k_x*x - k_z*z))
+        b['g'] = -1*PolRel['b']*(np.cos(k_x*x + k_z*z) + np.cos(k_x*x - k_z*(z + lam_z/2.0)))
+        u['g'] = -1*PolRel['u']*(np.sin(k_x*x + k_z*z) + np.sin(k_x*x - k_z*(z + lam_z/2.0)))
+        w['g'] =  1*PolRel['w']*(np.sin(k_x*x + k_z*z) + np.sin(k_x*x - k_z*(z + lam_z/2.0)))
     else:
         b['g'] = 0.0
         u['g'] = 0.0
@@ -241,9 +248,10 @@ def add_new_file_handler(snapshot_directory='snapshots/new', sdt=snap_dt):
 snapshots = add_new_file_handler('snapshots')
 snapshots.add_system(solver.state)
 
-# Add file handler for Hilbert Transform (HT)
-HT = add_new_file_handler('snapshots/HT')
-HT.add_task("integ(u,'x')", layout='g', name='<u>')
+# Add file handler for Complex Demodulation (CD)
+# CD = add_new_file_handler('snapshots/CD')
+# CD.add_task("w_g", layout='g', name='w_g')
+# CD.add_task("w_c", layout='c', name='w_c')
 
 ###############################################################################
 
