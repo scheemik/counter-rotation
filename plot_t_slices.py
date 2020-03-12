@@ -55,7 +55,7 @@ suptitle_size = 'large'
 T = 8.885765876316732
 
 # number of oscillation periods to skip at the start
-skip_nT = 3
+skip_nT = 0
 
 ###############################################################################
 # Helper functions
